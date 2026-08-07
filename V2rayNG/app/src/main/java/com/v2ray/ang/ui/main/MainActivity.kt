@@ -111,16 +111,7 @@ class MainActivity : HelperBaseComponentActivity() {
             delay(1200L)
             if (mainViewModel.uiState.value.isRunning) return@launch
             if (MmkvManager.getSelectServer().isNullOrEmpty()) return@launch
-
-            if (SettingsManager.isVpnMode()) {
-                val permissionIntent = VpnService.prepare(this@MainActivity)
-                if (permissionIntent != null) {
-                    requestVpnPermission.launch(permissionIntent)
-                    return@launch
-                }
-            }
-
-            MobileTinaAutomation.scheduleAutoConnect(this@MainActivity, "app-start")
+            smartConnectAndStart()
         }
     }
 
@@ -133,7 +124,7 @@ class MainActivity : HelperBaseComponentActivity() {
             mainViewModel = mainViewModel,
             onAction = { action ->
                 when (action) {
-                    MainAction.ToggleService -> handleFabAction()
+                    MainAction.ToggleService -> handleMainConnectAction()
                     MainAction.TestCurrentServer -> handleLayoutTestClick()
                     MainAction.ImportQRcode -> importQRcode()
                     MainAction.ImportClipboard -> importClipboard()
@@ -198,10 +189,61 @@ class MainActivity : HelperBaseComponentActivity() {
         settingsActivityLauncher.launch(intent)
     }
 
-    private fun handleFabAction() {
-        if (mainViewModel.uiState.value.isRunning) {
+    private fun handleMainConnectAction() {
+        val state = mainViewModel.uiState.value
+        if (state.isRunning) {
             LauncherManager.stopService(this)
-        } else if (SettingsManager.isVpnMode()) {
+            return
+        }
+        if (state.isTesting) return
+
+        if (MobileTinaAutomation.isAutoConnectOnAppStartEnabled()) {
+            smartConnectAndStart()
+        } else {
+            requestVpnPermissionAndStart()
+        }
+    }
+
+    private fun smartConnectAndStart() {
+        val groupId = mainViewModel.uiState.value.selectedGroupId
+        val initialServers = mainViewModel.serversForGroup(groupId).value
+        if (initialServers.isEmpty()) {
+            toast(R.string.title_file_chooser)
+            return
+        }
+
+        mainViewModel.testAllRealPing()
+
+        lifecycleScope.launch {
+            while (mainViewModel.uiState.value.isTesting) {
+                delay(250L)
+            }
+
+            // Keep the visible list sorted exactly like the manual "Sort by test results" command.
+            mainViewModel.onAction(MainAction.SortByTestResults)
+
+            val guids = mainViewModel.serversForGroup(groupId).value
+                .map { it.guid }
+                .ifEmpty { initialServers.map { it.guid } }
+
+            val best = guids.mapNotNull { guid ->
+                val delayMillis = MmkvManager.decodeServerAffiliationInfo(guid)?.testDelayMillis ?: 0L
+                if (delayMillis > 0L) guid to delayMillis else null
+            }.minByOrNull { it.second }
+
+            if (best == null) {
+                toast(R.string.mobiletina_no_working_server)
+                return@launch
+            }
+
+            mainViewModel.updateSelectedGuid(best.first)
+            delay(200L)
+            requestVpnPermissionAndStart()
+        }
+    }
+
+    private fun requestVpnPermissionAndStart() {
+        if (SettingsManager.isVpnMode()) {
             val intent = VpnService.prepare(this)
             if (intent == null) startV2Ray() else requestVpnPermission.launch(intent)
         } else {
