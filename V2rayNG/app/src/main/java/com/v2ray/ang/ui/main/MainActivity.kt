@@ -14,6 +14,7 @@ import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.LauncherManager
+import com.v2ray.ang.core.MobileTinaAutomation
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.PermissionType
@@ -49,6 +50,7 @@ import com.v2ray.ang.ui.userasset.UserAssetActivity
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -95,6 +97,27 @@ class MainActivity : HelperBaseComponentActivity() {
         mainViewModel.onAction(MainAction.Initialize)
 
         checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {}
+        maybeAutoConnectOnStart()
+    }
+
+    private fun maybeAutoConnectOnStart() {
+        if (!MobileTinaAutomation.isAutoConnectOnAppStartEnabled()) return
+
+        lifecycleScope.launch {
+            delay(1200L)
+            if (mainViewModel.uiState.value.isRunning) return@launch
+            if (MmkvManager.getSelectServer().isNullOrEmpty()) return@launch
+
+            if (SettingsManager.isVpnMode()) {
+                val permissionIntent = VpnService.prepare(this@MainActivity)
+                if (permissionIntent != null) {
+                    requestVpnPermission.launch(permissionIntent)
+                    return@launch
+                }
+            }
+
+            MobileTinaAutomation.scheduleAutoConnect(this@MainActivity, "app-start")
+        }
     }
 
     @Composable
@@ -143,6 +166,7 @@ class MainActivity : HelperBaseComponentActivity() {
             MainDestination.Routing -> Intent(this, RoutingSettingActivity::class.java)
             MainDestination.UserAssets -> Intent(this, UserAssetActivity::class.java)
             MainDestination.Settings -> Intent(this, SettingsActivity::class.java)
+            MainDestination.MobileTinaAutomation -> return
             MainDestination.Logcat -> Intent(this, LogcatActivity::class.java)
             MainDestination.CheckUpdate -> Intent(this, CheckUpdateActivity::class.java)
             MainDestination.BackupRestore -> Intent(this, BackupActivity::class.java)
@@ -191,7 +215,7 @@ class MainActivity : HelperBaseComponentActivity() {
     private fun restartV2Ray() {
         if (mainViewModel.uiState.value.isRunning) LauncherManager.stopService(this)
         lifecycleScope.launch {
-            kotlinx.coroutines.delay(500)
+            delay(500)
             startV2Ray()
         }
     }
