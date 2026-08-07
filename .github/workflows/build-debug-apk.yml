@@ -1,10 +1,11 @@
-name: Build Debug APK
+name: Build MobileTina Debug APK
 
 on:
   workflow_dispatch:
   push:
     branches:
       - agent/debug-apk-build
+      - agent/mobiletina-automation-v1
 
 permissions:
   contents: read
@@ -79,17 +80,17 @@ jobs:
           cache: gradle
           cache-dependency-path: V2rayNG/**/*.gradle*
 
-      - name: Build debug APK
+      - name: Build MobileTina debug APK
         run: |
           cd ${{ github.workspace }}/V2rayNG
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
           chmod 755 gradlew
           ./gradlew assemblePlaystoreDebug
 
-      - name: Upload debug APKs
+      - name: Upload MobileTina APKs
         uses: actions/upload-artifact@v7
         if: success()
         with:
-          name: v2rayNG-debug-apks
+          name: MobileTina-debug-apks
           path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/playstore/debug/*.apk
           if-no-files-found: error
