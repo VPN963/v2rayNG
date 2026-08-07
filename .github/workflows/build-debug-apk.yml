@@ -33,16 +33,13 @@ jobs:
             --channel=0 \
             --install "ndk;29.0.14206865"
           echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
-          sed -i '10i\\
-          \\
-              ndkVersion = "29.0.14206865"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
 
       - name: Restore cached libhevtun
         id: cache-libhevtun-restore
         uses: actions/cache/restore@v6
         with:
           path: ${{ github.workspace }}/libs
-          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+          key: libhevtun-${{ runner.os }}-ndk29-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
 
       - name: Build libhevtun
         if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
@@ -53,7 +50,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ${{ github.workspace }}/libs
-          key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+          key: libhevtun-${{ runner.os }}-ndk29-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
 
       - name: Copy libhevtun
         run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
