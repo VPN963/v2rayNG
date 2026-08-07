@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobiletina_app_name" translatable="false">MobileTina</string>
+    <string name="mobiletina_automation_title">MobileTina Automation</string>
+    <string name="mobiletina_status_connected">Connected</string>
+    <string name="mobiletina_status_disconnected">Disconnected</string>
+    <string name="mobiletina_smart_mode">Smart Mode</string>
+    <string name="mobiletina_auto_reconnect">Auto Reconnect</string>
+</resources>
