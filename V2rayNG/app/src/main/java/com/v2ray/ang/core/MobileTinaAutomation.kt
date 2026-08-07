@@ -61,28 +61,34 @@ object MobileTinaAutomation {
         )?.toLongOrNull()?.coerceIn(0L, 60L) ?: DEFAULT_AUTO_CONNECT_DELAY_SECONDS.toLong()) * 1000L
 
     /**
-     * Select the fastest server for which a positive delay test result is already known.
-     * If no tested server exists, the current selection is kept.
+     * Returns recovery candidates ordered by the best previously measured ping.
+     * The current server is kept first when smart selection is disabled.
      */
+    fun recoveryCandidates(): List<String> {
+        val current = MmkvManager.getSelectServer()
+        val all = MmkvManager.decodeAllServerList().distinct()
+        if (!isSmartServerEnabled()) {
+            return listOfNotNull(current).ifEmpty { all }
+        }
+
+        val tested = all.mapNotNull { guid ->
+            val delay = MmkvManager.decodeServerAffiliationInfo(guid)?.testDelayMillis ?: 0L
+            if (delay > 0L) guid to delay else null
+        }.sortedBy { it.second }.map { it.first }
+
+        val untested = all.filterNot { tested.contains(it) }
+        return (tested + untested + listOfNotNull(current)).distinct()
+    }
+
+    /** Select the fastest server for which a positive delay result is known. */
     fun selectFastestKnownServer(): String? {
         val current = MmkvManager.getSelectServer()
-        if (!isSmartServerEnabled()) return current
-
-        val best = MmkvManager.decodeAllServerList()
-            .asSequence()
-            .mapNotNull { guid ->
-                val delay = MmkvManager.decodeServerAffiliationInfo(guid)?.testDelayMillis ?: 0L
-                if (delay > 0L) guid to delay else null
-            }
-            .minByOrNull { it.second }
-            ?.first
-
+        val best = recoveryCandidates().firstOrNull() ?: current
         if (!best.isNullOrBlank() && best != current) {
             MmkvManager.setSelectServer(best)
             LogUtil.i(AppConfig.TAG, "MobileTina: selected fastest known server: $best")
-            return best
         }
-        return current
+        return best
     }
 
     fun isNetworkAllowed(capabilities: NetworkCapabilities?): Boolean {
