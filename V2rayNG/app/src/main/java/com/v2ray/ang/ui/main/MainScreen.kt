@@ -24,11 +24,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.dto.entities.ProfileItem
-import com.v2ray.ang.ui.compose.LocalDarkTheme
+import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.ui.compose.QRCodeDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -44,13 +43,16 @@ fun MainScreen(
     val groups = uiState.groups
     val isLoading by mainViewModel.isLoading.collectAsStateWithLifecycle()
     val isRunning = uiState.isRunning
-    val displayText = uiState.statusText
     val selectedGuid = uiState.selectedGuid
     val doubleColumnDisplay = uiState.doubleColumnDisplay
     val confirmRemove = uiState.confirmRemove
     val shareQRCodeBitmap = uiState.shareQRCodeBitmap
 
-    val isDarkTheme = LocalDarkTheme.current
+    val selectedProfile = selectedGuid?.let { MmkvManager.decodeServerConfig(it) }
+    val selectedPing = selectedGuid
+        ?.let { MmkvManager.decodeServerAffiliationInfo(it)?.testDelayMillis }
+        ?: 0L
+
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showSearch by remember { mutableStateOf(false) }
@@ -232,40 +234,39 @@ fun MainScreen(
                     }
                 )
             },
-            bottomBar = {
-                MainBottomBar(
-                    displayText = displayText,
-                    isRunning = isRunning,
-                    isDarkTheme = isDarkTheme,
-                    onAction = onAction
-                )
-            },
+            bottomBar = {},
             floatingActionButton = {},
         ) { innerPadding ->
-            val layoutDirection = LocalLayoutDirection.current
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                MobileTinaDashboard(
+                    isRunning = isRunning,
+                    isTesting = uiState.isTesting,
+                    selectedServerName = selectedProfile?.remarks.orEmpty(),
+                    selectedPingMillis = selectedPing,
+                    onToggle = { onAction(MainAction.ToggleService) }
+                )
 
-            if (groups.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-                    if (groups.size > 1) {
-                        GroupTabBar(
-                            groups = groups,
-                            selectedTabIndex = pagerState.currentPage.coerceIn(0, groups.lastIndex),
-                            mainViewModel = mainViewModel,
-                            onTabClick = { targetIndex ->
-                                scope.launch {
-                                    pagerState.navigateToPageOptimized(
-                                        targetPage = targetIndex,
-                                        animateAdjacentPage = true
-                                    )
-                                }
+                if (groups.size > 1) {
+                    GroupTabBar(
+                        groups = groups,
+                        selectedTabIndex = pagerState.currentPage.coerceIn(0, groups.lastIndex),
+                        mainViewModel = mainViewModel,
+                        onTabClick = { targetIndex ->
+                            scope.launch {
+                                pagerState.navigateToPageOptimized(
+                                    targetPage = targetIndex,
+                                    animateAdjacentPage = true
+                                )
                             }
-                        )
-                    }
+                        }
+                    )
+                }
 
+                if (groups.isNotEmpty()) {
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
@@ -295,9 +296,9 @@ fun MainScreen(
                             onRemoveServer = removeServer,
                             contentPadding = PaddingValues(
                                 start = 0.dp,
-                                top = 0.dp,
+                                top = 4.dp,
                                 end = 0.dp,
-                                bottom = 80.dp
+                                bottom = 16.dp
                             )
                         )
                     }
