@@ -11,6 +11,7 @@ data class MainUiState(
     val isRunning: Boolean = false,
     val isTesting: Boolean = false,
     val smartConnecting: Boolean = false,
+    val connectRequestId: Long = 0L,
     val statusText: String = "",
     val locateTarget: LocateTarget? = null,
     val confirmRemove: Boolean = false,
