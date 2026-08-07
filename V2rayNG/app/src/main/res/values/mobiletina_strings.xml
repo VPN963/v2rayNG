@@ -3,7 +3,15 @@
     <string name="mobiletina_app_name" translatable="false">MobileTina</string>
     <string name="mobiletina_automation_title">MobileTina Automation</string>
     <string name="mobiletina_status_connected">Connected</string>
-    <string name="mobiletina_status_disconnected">Disconnected</string>
-    <string name="mobiletina_smart_mode">Smart Mode</string>
+    <string name="mobiletina_status_disconnected">Ready to connect</string>
+    <string name="mobiletina_smart_mode">Smart Connect</string>
     <string name="mobiletina_auto_reconnect">Auto Reconnect</string>
+    <string name="mobiletina_connect">CONNECT</string>
+    <string name="mobiletina_disconnect">DISCONNECT</string>
+    <string name="mobiletina_testing">Testing all servers…</string>
+    <string name="mobiletina_selecting_best">Selecting fastest server…</string>
+    <string name="mobiletina_smart_hint">Real Delay → Sort → Fastest server</string>
+    <string name="mobiletina_no_working_server">No server with a valid real delay result was found.</string>
+    <string name="mobiletina_ping_format">Ping %1$d ms</string>
+    <string name="mobiletina_ping_unknown">Ping —</string>
 </resources>
