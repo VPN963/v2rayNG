@@ -9,6 +9,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
@@ -122,6 +126,8 @@ class MainActivity : HelperBaseComponentActivity() {
 
     @Composable
     override fun ScreenContent() {
+        var showAutomation by remember { mutableStateOf(false) }
+
         BackHandler { moveTaskToBack(false) }
         MainScreen(
             mainViewModel = mainViewModel,
@@ -142,8 +148,18 @@ class MainActivity : HelperBaseComponentActivity() {
                     else -> mainViewModel.onAction(action)
                 }
             },
-            onNavigate = { route -> navigateTo(route) },
+            onNavigate = { route ->
+                if (route == MainDestination.MobileTinaAutomation) {
+                    showAutomation = true
+                } else {
+                    navigateTo(route)
+                }
+            },
         )
+
+        if (showAutomation) {
+            MobileTinaAutomationDialog(onDismiss = { showAutomation = false })
+        }
     }
 
     private fun shareToClipboard(guid: String): Boolean =
