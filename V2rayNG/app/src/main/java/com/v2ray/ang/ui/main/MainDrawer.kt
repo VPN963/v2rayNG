@@ -56,11 +56,11 @@ private val primaryDrawerItems = listOf(
     MainDestination.MobileTinaAutomation
 )
 
+// Backup/restore is intentionally not exposed in MobileTina because public export paths are disabled.
 private val drawerItems = primaryDrawerItems + listOf(
     MainDestination.Promotion,
     MainDestination.Logcat,
     MainDestination.CheckUpdate,
-    MainDestination.BackupRestore,
     MainDestination.About,
     MainDestination.ResetVpn
 )
