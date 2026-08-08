@@ -7,17 +7,13 @@ import android.os.UserManager
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.MobileTinaExpiryManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.util.LogUtil
 
 class BootReceiver : BroadcastReceiver() {
     /**
-     * This method is called when the BroadcastReceiver is receiving an Intent broadcast.
-     * It handles BOOT_COMPLETED, LOCKED_BOOT_COMPLETED, and MY_PACKAGE_REPLACED.
-     * If the conditions are met, it starts the V2Ray service.
-     *
-     * @param context The Context in which the receiver is running.
-     * @param intent The Intent being received.
+     * Handles boot/package replacement, MobileTina config-expiry alarms, and optional VPN autostart.
      */
     override fun onReceive(context: Context?, intent: Intent?) {
         val action = intent?.action ?: return
@@ -25,18 +21,24 @@ class BootReceiver : BroadcastReceiver() {
 
         LogUtil.i(AppConfig.TAG, "BootReceiver received: $action")
 
+        if (action == MobileTinaExpiryManager.ACTION_EXPIRE) {
+            MobileTinaExpiryManager.executeIfDue(context)
+            return
+        }
+
         when (action) {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                // Continue
+                MobileTinaExpiryManager.recoverPending(context)
             }
 
             Intent.ACTION_LOCKED_BOOT_COMPLETED -> {
                 val userManager = context.getSystemService(Context.USER_SERVICE) as? UserManager
                 if (userManager != null && !userManager.isUserUnlocked) {
-                    LogUtil.w(AppConfig.TAG, "BootReceiver: User is locked, skipping auto start")
+                    LogUtil.w(AppConfig.TAG, "BootReceiver: User is locked, skipping protected-data recovery")
                     return
                 }
+                MobileTinaExpiryManager.recoverPending(context)
             }
 
             else -> {
