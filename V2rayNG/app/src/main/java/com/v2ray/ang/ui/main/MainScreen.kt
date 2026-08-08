@@ -299,6 +299,7 @@ fun MainScreen(
                                         smartConnecting = smartConnecting,
                                         smartCountdownSeconds = smartCountdownSeconds,
                                         smartConnectionFailed = smartConnectionFailed,
+                                        selectedSubscriptionId = uiState.selectedGroupId,
                                         selectedServerName = selectedProfile?.remarks.orEmpty(),
                                         selectedServerDetails = selectedProfile?.server.orEmpty(),
                                         selectedPingMillis = selectedPing,
