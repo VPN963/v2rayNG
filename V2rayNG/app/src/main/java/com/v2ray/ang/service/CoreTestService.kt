@@ -142,12 +142,19 @@ class CoreTestService : Service() {
     }
 
     private fun handleMeasureCancel() {
-        MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_FINISH, "0")
+        val snapshot = ArrayList(activeWorkers)
         LogUtil.i(
             AppConfig.TAG,
-            "CoreTestService received cancel message, cancelling ${activeWorkers.size} active workers"
+            "CoreTestService received cancel message, cancelling ${snapshot.size} active workers"
         )
-        val snapshot = ArrayList(activeWorkers)
+
+        // A no-op cancel used before a fresh batch must not be reported as that batch's Finish.
+        // Otherwise an event-driven Smart Connect waiter could consume the stale cancellation event
+        // and continue before the new Real Delay batch has actually completed.
+        if (snapshot.isNotEmpty()) {
+            MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_FINISH, "0")
+        }
+
         snapshot.forEach { it.cancel() }
         activeWorkers.clear()
         stopSelf()
