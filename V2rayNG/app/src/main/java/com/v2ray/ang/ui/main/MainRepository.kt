@@ -16,6 +16,7 @@ import com.v2ray.ang.dto.entities.SubscriptionCache
 import com.v2ray.ang.dto.entities.SubscriptionItem
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.MobileTinaExpiryManager
 import com.v2ray.ang.handler.MobileTinaSubscriptionInfo
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
@@ -64,9 +65,14 @@ class MainRepository(
                     safeIntent.getStringExtra("content").orEmpty()
                 )
 
-                AppConfig.MSG_MEASURE_CONFIG_FINISH -> MainServiceEvent.MeasureConfigFinish(
-                    safeIntent.getStringExtra("content")
-                )
+                AppConfig.MSG_MEASURE_CONFIG_FINISH -> {
+                    val content = safeIntent.getStringExtra("content")
+                    if (content == MobileTinaExpiryManager.DATA_CHANGED_MARKER) {
+                        MainServiceEvent.MobileTinaDataChanged
+                    } else {
+                        MainServiceEvent.MeasureConfigFinish(content)
+                    }
+                }
 
                 else -> null
             }
