@@ -21,6 +21,11 @@ import java.util.concurrent.TimeUnit
 
 object HttpUtil {
 
+    data class SubscriptionHeaderResult(
+        val requestSucceeded: Boolean,
+        val userInfo: String? = null
+    )
+
     /**
      * Converts the domain part of a URL string to its IDN (Punycode, ASCII Compatible Encoding) format.
      *
@@ -48,41 +53,29 @@ object HttpUtil {
      * @return The domain in ASCII-compatible (Punycode) format, or the original string if input is an IP or already ASCII.
      */
     fun toIdnDomain(domain: String): String {
-        // Return as is if it's a pure IP address (IPv4 or IPv6)
         if (Utils.isPureIpAddress(domain)) {
             return domain
         }
 
-        // Return as is if already ASCII (English domain or already punycode)
         if (domain.all { it.code < 128 }) {
             return domain
         }
 
-        // Otherwise, convert to ASCII using IDN
         return IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED)
     }
 
-    /**
-     * Resolves a hostname to an IP address, returns original input if it's already an IP
-     *
-     * @param host The hostname or IP address to resolve
-     * @param ipv6Preferred Whether to prefer IPv6 addresses, defaults to false
-     * @return The resolved IP address or the original input (if it's already an IP or resolution fails)
-     */
+    /** Resolves a hostname to an IP address, returns original input if it's already an IP. */
     fun resolveHostToIP(host: String, ipv6Preferred: Boolean = false): List<String>? {
         try {
-            // If it's already an IP address, return it as a list
             if (Utils.isPureIpAddress(host)) {
                 return null
             }
 
-            // Get all IP addresses
             val addresses = InetAddress.getAllByName(host)
             if (addresses.isEmpty()) {
                 return null
             }
 
-            // Sort addresses based on preference
             val sortedAddresses = if (ipv6Preferred) {
                 addresses.sortedWith(compareByDescending { it is Inet6Address })
             } else {
@@ -90,9 +83,7 @@ object HttpUtil {
             }
 
             val ipList = sortedAddresses.mapNotNull { it.hostAddress }
-
             LogUtil.i(AppConfig.TAG, "Resolved IPs for $host: ${ipList.joinToString()}")
-
             return ipList
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to resolve host to IP", e)
@@ -100,18 +91,16 @@ object HttpUtil {
         }
     }
 
-
-    /**
-     * Retrieves the content of a URL as a string.
-     *
-     * @param url The URL to fetch content from.
-     * @param timeout The timeout value in milliseconds.
-     * @param httpPort The HTTP port to use.
-     * @return The content of the URL as a string.
-     */
+    /** Retrieves the content of a URL as a string. */
     fun getUrlContent(request: UrlContentRequest): String? {
         val url = request.url ?: return null
-        val client = buildOkHttpClient(request.timeout, request.httpPort, request.proxyUsername, request.proxyPassword, followRedirects = true)
+        val client = buildOkHttpClient(
+            request.timeout,
+            request.httpPort,
+            request.proxyUsername,
+            request.proxyPassword,
+            followRedirects = true
+        )
         val requestBuilder = Request.Builder()
             .url(url)
             .get()
@@ -133,15 +122,7 @@ object HttpUtil {
         return null
     }
 
-    /**
-     * Retrieves the content of a URL as a string with a custom User-Agent header.
-     *
-     * @param url The URL to fetch content from.
-     * @param timeout The timeout value in milliseconds.
-     * @param httpPort The HTTP port to use.
-     * @return The content of the URL as a string.
-     * @throws IOException If an I/O error occurs.
-     */
+    /** Retrieves the content of a URL as a string with a custom User-Agent header. */
     @Throws(IOException::class)
     fun getUrlContentWithUserAgent(request: UrlContentRequest): String {
         var currentUrl = request.url
@@ -150,7 +131,13 @@ object HttpUtil {
 
         while (redirects++ < maxRedirects) {
             if (currentUrl == null) continue
-            val client = buildOkHttpClient(request.timeout, request.httpPort, request.proxyUsername, request.proxyPassword, followRedirects = false)
+            val client = buildOkHttpClient(
+                request.timeout,
+                request.httpPort,
+                request.proxyUsername,
+                request.proxyPassword,
+                followRedirects = false
+            )
             val finalUserAgent = if (request.userAgent.isNullOrBlank()) {
                 "v2rayNG/${BuildConfig.VERSION_NAME}"
             } else {
@@ -163,7 +150,6 @@ object HttpUtil {
                 .header("Connection", "close")
 
             applyEmbeddedBasicAuthHeader(currentUrl, requestBuilder)
-
 
             val headersMap = JsonUtil.parseHeadersToMap(request.requestHeaders)
             for ((key, value) in headersMap) {
@@ -203,6 +189,71 @@ object HttpUtil {
             }
         }
         throw IOException("Too many redirects")
+    }
+
+    /**
+     * Fetches only the response headers needed by MobileTina's subscription status card.
+     * The response body is never consumed, avoiding a second subscription payload download.
+     */
+    fun getSubscriptionUserInfoHeader(request: UrlContentRequest): SubscriptionHeaderResult {
+        var currentUrl = request.url ?: return SubscriptionHeaderResult(false)
+        var redirects = 0
+        val maxRedirects = 3
+
+        return try {
+            while (redirects++ < maxRedirects) {
+                val client = buildOkHttpClient(
+                    request.timeout,
+                    request.httpPort,
+                    request.proxyUsername,
+                    request.proxyPassword,
+                    followRedirects = false
+                )
+                val finalUserAgent = if (request.userAgent.isNullOrBlank()) {
+                    "v2rayNG/${BuildConfig.VERSION_NAME}"
+                } else {
+                    request.userAgent
+                }
+                val requestBuilder = Request.Builder()
+                    .url(currentUrl)
+                    .get()
+                    .header("User-agent", finalUserAgent)
+                    .header("Connection", "close")
+
+                applyEmbeddedBasicAuthHeader(currentUrl, requestBuilder)
+
+                JsonUtil.parseHeadersToMap(request.requestHeaders).forEach { (key, value) ->
+                    runCatching { requestBuilder.header(key, value) }
+                }
+
+                if (request.httpPort != 0 && !request.proxyUsername.isNullOrBlank() && !request.proxyPassword.isNullOrBlank()) {
+                    requestBuilder.header(
+                        "Proxy-Authorization",
+                        Credentials.basic(request.proxyUsername, request.proxyPassword)
+                    )
+                }
+
+                client.newCall(requestBuilder.build()).execute().use { response ->
+                    if (response.isRedirect) {
+                        val location = response.header("Location")
+                            ?: return SubscriptionHeaderResult(false)
+                        currentUrl = resolveLocation(currentUrl, location)
+                            ?: return SubscriptionHeaderResult(false)
+                    } else if (response.isSuccessful) {
+                        return SubscriptionHeaderResult(
+                            requestSucceeded = true,
+                            userInfo = response.header("subscription-userinfo")
+                        )
+                    } else {
+                        return SubscriptionHeaderResult(false)
+                    }
+                }
+            }
+            SubscriptionHeaderResult(false)
+        } catch (e: Exception) {
+            LogUtil.d(AppConfig.TAG, "Subscription user-info header unavailable: ${e.message}")
+            SubscriptionHeaderResult(false)
+        }
     }
 
     private fun applyEmbeddedBasicAuthHeader(rawUrl: String, requestBuilder: Request.Builder) {
@@ -274,7 +325,13 @@ object HttpUtil {
         targetFile: File
     ): Boolean {
         val url = request.url ?: return false
-        val client = buildOkHttpClient(request.timeout, request.httpPort, request.proxyUsername, request.proxyPassword, followRedirects = true)
+        val client = buildOkHttpClient(
+            request.timeout,
+            request.httpPort,
+            request.proxyUsername,
+            request.proxyPassword,
+            followRedirects = true
+        )
         val requestBuilder = Request.Builder()
             .url(url)
             .get()
