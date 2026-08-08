@@ -189,21 +189,29 @@ class MainRepository(
         server: String?,
         subscriptionId: String,
         updateUI: Boolean
-    ): Pair<Int, Int> = AngConfigManager.importBatchConfig(
-        MobileTinaImportNormalizer.normalize(server),
-        subscriptionId,
-        updateUI
-    )
+    ): Pair<Int, Int> {
+        val result = AngConfigManager.importBatchConfig(
+            MobileTinaImportNormalizer.normalize(server),
+            subscriptionId,
+            updateUI
+        )
+        if (result.first > 0 || result.second > 0) {
+            MobileTinaExpiryManager.rescheduleFromStoredConfigs(app)
+        }
+        return result
+    }
 
     override fun updateConfigViaSubAll(): SubscriptionUpdateResult {
         val result = AngConfigManager.updateConfigViaSubAll()
         MobileTinaSubscriptionInfo.refreshAll()
+        MobileTinaExpiryManager.rescheduleFromStoredConfigs(app)
         return result
     }
 
     override fun updateConfigViaSub(subscriptionCache: SubscriptionCache): SubscriptionUpdateResult {
         val result = AngConfigManager.updateConfigViaSub(subscriptionCache)
         MobileTinaSubscriptionInfo.refresh(subscriptionCache.guid)
+        MobileTinaExpiryManager.rescheduleFromStoredConfigs(app)
         return result
     }
 
