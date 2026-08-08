@@ -42,8 +42,6 @@ fun MainBottomBar(
     onAction: (MainAction) -> Unit,
     onSmartConnect: () -> Unit
 ) {
-    // The default is evaluated on each parent recomposition. MainScreen observes selectedGuid,
-    // therefore a manual server tap immediately refreshes this compact panel as well.
     val selectedProfile = selectedGuid?.let(MmkvManager::decodeServerConfig)
     val selectedPing = selectedGuid
         ?.let { MmkvManager.decodeServerAffiliationInfo(it)?.testDelayMillis }
@@ -54,13 +52,13 @@ fun MainBottomBar(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp
+            tonalElevation = 2.dp
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 3.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 FloatingActionButton(
@@ -82,7 +80,7 @@ fun MainBottomBar(
                     )
                 }
 
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(3.dp))
 
                 Surface(
                     modifier = Modifier.clickable(onClick = onSmartConnect),
@@ -110,39 +108,46 @@ fun MainBottomBar(
                     }
                 }
 
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(3.dp))
 
                 if (selectedProfile != null) {
-                    Text(
-                        text = selectedProfile.remarks,
-                        modifier = Modifier.fillMaxWidth(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(Modifier.height(2.dp))
-
-                    Text(
-                        text = when {
-                            selectedPing > 0L -> selectedPing.toString()
-                            selectedPing < 0L -> stringResource(R.string.mobiletina_ping_inactive)
-                            else -> stringResource(R.string.mobiletina_ping_unknown)
-                        },
+                    Row(
                         modifier = Modifier
                             .clickable { onAction(MainAction.TestCurrentServer) }
-                            .padding(horizontal = 12.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
+                            .padding(horizontal = 8.dp, vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = selectedProfile.remarks,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "  •  ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = when {
+                                selectedPing > 0L -> selectedPing.toString()
+                                selectedPing < 0L -> stringResource(R.string.mobiletina_ping_inactive)
+                                else -> stringResource(R.string.mobiletina_ping_unknown)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 } else if (displayText.isNotBlank()) {
                     Text(
                         text = displayText,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 1.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
