@@ -29,13 +29,10 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.core.MobileTinaAutomation
-import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.core.MobileTinaRealDelayCoordinator
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.extension.toast
-import com.v2ray.ang.extension.toastError
-import com.v2ray.ang.extension.toastSuccess
-import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.MobileTinaResetManager
 import com.v2ray.ang.handler.SettingsChangeManager
@@ -48,7 +45,6 @@ import com.v2ray.ang.ui.logcat.LogcatActivity
 import com.v2ray.ang.ui.perappproxy.PerAppProxyActivity
 import com.v2ray.ang.ui.routing.RoutingSettingActivity
 import com.v2ray.ang.ui.server.ProfileEditorResult
-import com.v2ray.ang.ui.server.ServerCustomConfigActivity
 import com.v2ray.ang.ui.server.ServerGroupActivity
 import com.v2ray.ang.ui.server.ServerHttpActivity
 import com.v2ray.ang.ui.server.ServerHysteria2Activity
@@ -64,10 +60,10 @@ import com.v2ray.ang.ui.subscription.SubSettingActivity
 import com.v2ray.ang.ui.userasset.UserAssetActivity
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.ceil
 
 class MainActivity : HelperBaseComponentActivity() {
@@ -231,9 +227,6 @@ class MainActivity : HelperBaseComponentActivity() {
                     MainAction.RestartService -> restartV2Ray()
                     MainAction.LocateSelectedServer -> mainViewModel.triggerLocateSelectedServer()
                     is MainAction.SelectServer -> setSelectServer(action.guid)
-                    is MainAction.EditServer -> editServer(action.guid, action.profile)
-                    is MainAction.ShareClipboard -> shareToClipboard(action.guid)
-                    is MainAction.ShareFullContent -> shareFullContentAsync(action.guid)
                     else -> mainViewModel.onAction(action)
                 }
             },
@@ -274,19 +267,6 @@ class MainActivity : HelperBaseComponentActivity() {
                     }
                 }
             )
-        }
-    }
-
-    private fun shareToClipboard(guid: String): Boolean =
-        AngConfigManager.share2Clipboard(this, guid) == 0
-
-    private fun shareFullContentAsync(guid: String) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val result = AngConfigManager.shareFullContent2Clipboard(this@MainActivity, guid)
-            withContext(Dispatchers.Main) {
-                if (result == 0) toastSuccess(R.string.toast_success)
-                else toastError(R.string.toast_failure)
-            }
         }
     }
 
@@ -355,26 +335,36 @@ class MainActivity : HelperBaseComponentActivity() {
             return
         }
 
+        val startGeneration = MobileTinaRealDelayCoordinator.generation
         smartCountdownSeconds = SMART_CONNECT_TIMEOUT_SECONDS
         mainViewModel.testAllRealPing()
 
         lifecycleScope.launch {
             val deadline = SystemClock.elapsedRealtime() + SMART_CONNECT_TIMEOUT_MS
-
-            while (mainViewModel.uiState.value.isTesting) {
-                val remaining = deadline - SystemClock.elapsedRealtime()
-                if (remaining <= 0L) break
-                smartCountdownSeconds = ceil(remaining / 1000.0).toInt().coerceAtLeast(1)
-                delay(100L)
+            val countdownJob = launch {
+                while (isActive) {
+                    val remaining = deadline - SystemClock.elapsedRealtime()
+                    if (remaining <= 0L) break
+                    smartCountdownSeconds = ceil(remaining / 1000.0).toInt().coerceAtLeast(1)
+                    delay(100L)
+                }
             }
 
-            if (mainViewModel.uiState.value.isTesting) {
-                mainViewModel.cancelAllPing()
-            }
+            val finishedNaturally = withTimeoutOrNull(SMART_CONNECT_TIMEOUT_MS) {
+                MobileTinaRealDelayCoordinator.awaitNext(startGeneration)
+                true
+            } ?: false
+
+            countdownJob.cancel()
             smartCountdownSeconds = 0
 
-            // Execute the same sort command used by the manual menu. Selection below reads
-            // directly from the persisted real-delay results, so it does not depend on UI reload timing.
+            if (!finishedNaturally && mainViewModel.uiState.value.isTesting) {
+                mainViewModel.cancelAllPing()
+            }
+
+            // Results are persisted before the Finish broadcast. Sorting is kept for the manual UI,
+            // while fastest-server selection reads persisted Real Delay values directly and therefore
+            // does not depend on asynchronous list reload timing.
             mainViewModel.onAction(MainAction.SortByTestResults)
 
             val best = initialServers.mapNotNull { server ->
@@ -517,30 +507,6 @@ class MainActivity : HelperBaseComponentActivity() {
                 LogUtil.e(AppConfig.TAG, "Failed to read content from URI", e)
             }
         }
-    }
-
-    private fun editServer(guid: String, profile: ProfileItem) {
-        val activityClass = when (profile.configType) {
-            EConfigType.CUSTOM -> ServerCustomConfigActivity::class.java
-            EConfigType.POLICYGROUP -> ServerGroupActivity::class.java
-            EConfigType.PROXYCHAIN -> ServerProxyChainActivity::class.java
-            EConfigType.VMESS -> ServerVmessActivity::class.java
-            EConfigType.VLESS -> ServerVlessActivity::class.java
-            EConfigType.SHADOWSOCKS -> ServerShadowsocksActivity::class.java
-            EConfigType.SOCKS -> ServerSocksActivity::class.java
-            EConfigType.HTTP -> ServerHttpActivity::class.java
-            EConfigType.TROJAN -> ServerTrojanActivity::class.java
-            EConfigType.WIREGUARD -> ServerWireguardActivity::class.java
-            EConfigType.HYSTERIA2 -> ServerHysteria2Activity::class.java
-            else -> ServerHttpActivity::class.java
-        }
-        val intent = Intent(this, activityClass).apply {
-            putExtra("guid", guid)
-            putExtra("isRunning", mainViewModel.uiState.value.isRunning)
-            putExtra("createConfigType", profile.configType.value)
-            putExtra("subscriptionId", mainViewModel.uiState.value.selectedGroupId)
-        }
-        profileEditorLauncher.launch(intent)
     }
 
     private fun setSelectServer(guid: String) {
