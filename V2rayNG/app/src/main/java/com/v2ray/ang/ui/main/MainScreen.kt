@@ -336,7 +336,7 @@ fun MainScreen(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 Column(modifier = Modifier.fillMaxSize()) {
-                                    if (groups.size > 1) {
+                                    if (groups.isNotEmpty()) {
                                         GroupTabBar(
                                             groups = groups,
                                             selectedTabIndex = groupPagerState.currentPage.coerceIn(0, groups.lastIndex),
