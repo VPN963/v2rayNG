@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig.ANG_PACKAGE
+import com.v2ray.ang.handler.MobileTinaExpiryManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.compose.ThemeManager
 
@@ -40,6 +41,9 @@ class AngApplication : Application() {
 
         // Ensure critical preference defaults are present in MMKV early
         SettingsManager.initApp(this)
+
+        // Recover/execute a persisted JSON-config expiry after process recreation.
+        MobileTinaExpiryManager.recoverPending(this)
 
         // Initialize theme state from MMKV
         ThemeManager.refresh()
