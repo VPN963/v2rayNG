@@ -11,6 +11,8 @@ data class MainUiState(
     val isRunning: Boolean = false,
     val isTesting: Boolean = false,
     val smartConnecting: Boolean = false,
+    val smartCountdownSeconds: Int = 0,
+    val smartConnectionFailed: Boolean = false,
     val connectRequestId: Long = 0L,
     val statusText: String = "",
     val locateTarget: LocateTarget? = null,
@@ -24,6 +26,7 @@ sealed interface MainAction {
     data object Initialize : MainAction
     data object RefreshGroups : MainAction
     data object ToggleService : MainAction
+    data object SmartConnect : MainAction
     data object TestCurrentServer : MainAction
     data object TestAllServers : MainAction
     data object TestRealAllServers : MainAction
