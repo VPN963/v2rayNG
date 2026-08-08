@@ -23,7 +23,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.entities.SubscriptionItem
@@ -37,22 +36,24 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.ui.base.BaseComponentActivity
 import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.DeleteConfirmDialog
 import com.v2ray.ang.ui.compose.FormDropdownField
 import com.v2ray.ang.ui.compose.FormTextField
 import com.v2ray.ang.ui.compose.SettingsSwitchItem
 import com.v2ray.ang.ui.compose.verticalScrollbar
 import com.v2ray.ang.util.Utils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
+/** MobileTina keeps this screen only for adding a new subscription; editing existing links is disabled. */
 class SubEditActivity : BaseComponentActivity() {
-    private val editSubId by lazy { intent.getStringExtra("subId").orEmpty() }
     private lateinit var suggestions: List<String>
-    private lateinit var subItem: SubscriptionItem
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Existing subscriptions are intentionally not editable in MobileTina.
+        if (!intent.getStringExtra("subId").isNullOrBlank()) {
+            finish()
+            return
+        }
 
         suggestions = SettingsManager.getProfileRemarks(
             excludeConfigTypes = setOf(
@@ -61,23 +62,19 @@ class SubEditActivity : BaseComponentActivity() {
                 EConfigType.PROXYCHAIN,
             )
         )
-        subItem = MmkvManager.decodeSubscription(editSubId) ?: SubscriptionItem()
     }
 
     @Composable
     override fun ScreenContent() {
-        SubEditScreen(
-            editSubId = editSubId,
-            initial = subItem,
+        SubAddScreen(
+            initial = SubscriptionItem(),
             profileSuggestions = suggestions,
             onBackClick = { finish() },
-            onSave = { saveServer(it) },
-            onDelete = { deleteServer() }
+            onSave = { saveSubscription(it) }
         )
     }
 
-    private fun saveServer(subItem: SubscriptionItem): Boolean {
-
+    private fun saveSubscription(subItem: SubscriptionItem): Boolean {
         if (TextUtils.isEmpty(subItem.remarks)) {
             toast(R.string.sub_setting_remarks)
             return false
@@ -89,9 +86,7 @@ class SubEditActivity : BaseComponentActivity() {
             }
             if (!Utils.isValidSubUrl(subItem.url)) {
                 toast(R.string.toast_insecure_url_protocol)
-                if (!subItem.allowInsecureUrl) {
-                    return false
-                }
+                if (!subItem.allowInsecureUrl) return false
             }
         }
 
@@ -100,38 +95,24 @@ class SubEditActivity : BaseComponentActivity() {
             return false
         }
 
-        MmkvManager.encodeSubscription(editSubId, subItem)
-        SubscriptionUpdater.syncOne(subId = editSubId)
+        MmkvManager.encodeSubscription("", subItem)
+        SubscriptionUpdater.sync(this)
         SettingsChangeManager.makeSetupGroupTab()
         toastSuccess(R.string.toast_success)
         finish()
         return true
     }
-
-    private fun deleteServer(): Boolean {
-        if (editSubId.isNotEmpty()) {
-            lifecycleScope.launch(Dispatchers.IO) {
-                SettingsManager.removeSubscriptionWithDefault(editSubId)
-                SettingsChangeManager.makeSetupGroupTab()
-                launch(Dispatchers.Main) { finish() }
-            }
-        }
-        return true
-    }
 }
 
 @Composable
-fun SubEditScreen(
-    editSubId: String,
+private fun SubAddScreen(
     initial: SubscriptionItem,
     profileSuggestions: List<String>,
     onBackClick: () -> Unit,
-    onSave: (SubscriptionItem) -> Boolean,
-    onDelete: () -> Unit
+    onSave: (SubscriptionItem) -> Boolean
 ) {
-    //val context = LocalContext.current
-    var remarks by rememberSaveable { mutableStateOf(initial.remarks.orEmpty()) }
-    var url by rememberSaveable { mutableStateOf(initial.url.orEmpty()) }
+    var remarks by rememberSaveable { mutableStateOf(initial.remarks) }
+    var url by rememberSaveable { mutableStateOf(initial.url) }
     var userAgent by rememberSaveable { mutableStateOf(initial.userAgent.orEmpty()) }
     var requestHeaders by rememberSaveable { mutableStateOf(initial.requestHeaders.orEmpty()) }
     var filter by rememberSaveable { mutableStateOf(initial.filter ?: "") }
@@ -142,24 +123,20 @@ fun SubEditScreen(
     var prevProfile by rememberSaveable { mutableStateOf(initial.prevProfile ?: "") }
     var nextProfile by rememberSaveable { mutableStateOf(initial.nextProfile ?: "") }
 
-    var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
-    val confirmRemove = MmkvManager.decodeSettingsBool(AppConfig.PREF_CONFIRM_REMOVE, false)
     val scrollState = rememberScrollState()
 
-    fun buildSubItem(): SubscriptionItem {
-        val subItem = MmkvManager.decodeSubscription(editSubId) ?: SubscriptionItem()
-        subItem.remarks = remarks
-        subItem.url = url
-        subItem.userAgent = userAgent
-        subItem.requestHeaders = requestHeaders
-        subItem.filter = filter
-        subItem.enabled = enabled
-        subItem.autoUpdate = autoUpdate
-        subItem.updateInterval = updateInterval.toLongEx()
-        subItem.prevProfile = prevProfile
-        subItem.nextProfile = nextProfile
-        subItem.allowInsecureUrl = allowInsecureUrl
-        return subItem
+    fun buildSubItem(): SubscriptionItem = SubscriptionItem().also { item ->
+        item.remarks = remarks
+        item.url = url
+        item.userAgent = userAgent
+        item.requestHeaders = requestHeaders
+        item.filter = filter
+        item.enabled = enabled
+        item.autoUpdate = autoUpdate
+        item.updateInterval = updateInterval.toLongEx()
+        item.prevProfile = prevProfile
+        item.nextProfile = nextProfile
+        item.allowInsecureUrl = allowInsecureUrl
     }
 
     Scaffold(
@@ -169,15 +146,11 @@ fun SubEditScreen(
                 title = stringResource(R.string.title_sub_setting),
                 onBackClick = onBackClick,
                 actions = {
-                    if (editSubId.isNotEmpty()) {
-                        IconButton(onClick = {
-                            if (confirmRemove) showDeleteConfirm = true else onDelete()
-                        }) {
-                            Icon(painterResource(R.drawable.ic_delete_24dp), contentDescription = stringResource(R.string.acc_delete))
-                        }
-                    }
-                    IconButton(onClick = { buildSubItem()?.let { onSave(it) } }) {
-                        Icon(painterResource(R.drawable.ic_fab_check), contentDescription = stringResource(R.string.acc_save))
+                    IconButton(onClick = { onSave(buildSubItem()) }) {
+                        Icon(
+                            painterResource(R.drawable.ic_fab_check),
+                            contentDescription = stringResource(R.string.acc_save)
+                        )
                     }
                 }
             )
@@ -204,18 +177,17 @@ fun SubEditScreen(
                 checked = enabled,
                 onCheckedChange = { enabled = it }
             )
-
             SettingsSwitchItem(
                 title = stringResource(R.string.sub_auto_update),
                 checked = autoUpdate,
                 onCheckedChange = { autoUpdate = it }
             )
-
             FormTextField(
                 stringResource(R.string.title_pref_auto_update_interval),
-                updateInterval, { updateInterval = it }, keyboardType = KeyboardType.Number
+                updateInterval,
+                { updateInterval = it },
+                keyboardType = KeyboardType.Number
             )
-
             SettingsSwitchItem(
                 title = stringResource(R.string.sub_allow_insecure_url),
                 checked = allowInsecureUrl,
@@ -238,13 +210,5 @@ fun SubEditScreen(
                 editable = true
             )
         }
-    }
-
-    if (showDeleteConfirm) {
-        DeleteConfirmDialog(
-            message = stringResource(R.string.confirm_delete_subscription_group),
-            onConfirm = onDelete,
-            onDismiss = { showDeleteConfirm = false }
-        )
     }
 }
