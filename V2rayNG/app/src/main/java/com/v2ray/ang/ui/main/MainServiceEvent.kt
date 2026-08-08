@@ -10,4 +10,5 @@ sealed class MainServiceEvent {
     data object MeasureConfigSuccess : MainServiceEvent()
     data class MeasureConfigNotify(val progress: String) : MainServiceEvent()
     data class MeasureConfigFinish(val finishedCount: String?) : MainServiceEvent()
+    data object MobileTinaDataChanged : MainServiceEvent()
 }
