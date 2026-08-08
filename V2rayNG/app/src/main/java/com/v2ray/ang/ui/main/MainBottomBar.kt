@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +38,8 @@ fun MainBottomBar(
     displayText: String,
     isRunning: Boolean,
     isDarkTheme: Boolean,
-    onAction: (MainAction) -> Unit
+    onAction: (MainAction) -> Unit,
+    onSmartConnect: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -46,7 +48,7 @@ fun MainBottomBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .height(64.dp)
+                    .height(88.dp)
                     .clickable(onClick = { onAction(MainAction.TestCurrentServer) }),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp
@@ -54,14 +56,15 @@ fun MainBottomBar(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                        .padding(start = 16.dp, end = 156.dp, top = 12.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.Start
                 ) {
                     Text(text = displayText, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
+
         FloatingActionButton(
             onClick = { onAction(MainAction.ToggleService) },
             modifier = Modifier
@@ -82,6 +85,35 @@ fun MainBottomBar(
                 tint = Color.White,
                 modifier = Modifier.size(24.dp)
             )
+        }
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 20.dp)
+                .offset(y = 38.dp)
+                .clickable(onClick = onSmartConnect),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            tonalElevation = 2.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_flash_on_24dp),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.mobiletina_manual_smart_connect),
+                    modifier = Modifier.padding(start = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
         }
     }
 }
