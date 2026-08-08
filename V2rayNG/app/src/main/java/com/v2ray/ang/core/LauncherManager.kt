@@ -52,7 +52,7 @@ object LauncherManager {
     }
 
     fun stopService(context: Context) {
-        //context.toast(R.string.toast_services_stop)
+        MobileTinaSessionLimiter.cancel(context)
         MessageHelper.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
 
@@ -100,10 +100,11 @@ object LauncherManager {
             error(context.getString(R.string.toast_root_required))
         }
 
+        val isVpnMode = !isRootMode && SettingsManager.isVpnMode()
         val intent = if (isRootMode) {
             LogUtil.i(AppConfig.TAG, "LauncherManager: Starting Root service")
             Intent(context.applicationContext, CoreRootService::class.java)
-        } else if (SettingsManager.isVpnMode()) {
+        } else if (isVpnMode) {
             LogUtil.i(AppConfig.TAG, "LauncherManager: Starting VPN service")
             Intent(context.applicationContext, CoreVpnService::class.java)
         } else {
@@ -113,6 +114,11 @@ object LauncherManager {
 
         try {
             ContextCompat.startForegroundService(context, intent)
+            if (isVpnMode) {
+                MobileTinaSessionLimiter.schedule(context)
+            } else {
+                MobileTinaSessionLimiter.cancel(context)
+            }
         } catch (e: SecurityException) {
             LogUtil.e(AppConfig.TAG, "LauncherManager: Missing permission to start foreground service", e)
             throw IllegalStateException(e.message ?: e.javaClass.simpleName, e)
