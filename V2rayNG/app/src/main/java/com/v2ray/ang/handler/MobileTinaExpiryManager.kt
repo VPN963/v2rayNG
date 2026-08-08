@@ -33,6 +33,7 @@ object MobileTinaExpiryManager {
 
     const val DATA_CHANGED_MARKER = "mobiletina_data_changed"
     const val ACTION_EXPIRE = "com.v2ray.mobiletina.action.CONFIG_EXPIRE"
+    const val ACTION_DATA_CHANGED = "com.v2ray.mobiletina.action.DATA_CHANGED"
 
     private const val PREFS_NAME = "mobiletina_config_expiry"
     private const val KEY_TRIGGER_AT_MILLIS = "trigger_at_millis"
@@ -129,12 +130,21 @@ object MobileTinaExpiryManager {
             )
             MmkvManager.encodeSettings(AppConfig.CACHE_SUBSCRIPTION_ID, EXPIRED_SUBSCRIPTION_ID)
 
-            // Reuse the existing app-to-UI broadcast channel with a MobileTina marker.
+            // Keep the existing service-event path for compatibility with current screens.
             MessageHelper.sendMsg2UI(
                 appContext,
                 AppConfig.MSG_MEASURE_CONFIG_FINISH,
                 DATA_CHANGED_MARKER
             )
+
+            // Dedicated in-app refresh signal. MainScreen listens dynamically while it is alive,
+            // so an expiry immediately rebuilds the subscription tabs instead of waiting for restart.
+            appContext.sendBroadcast(
+                Intent(ACTION_DATA_CHANGED).apply {
+                    `package` = appContext.packageName
+                }
+            )
+
             LogUtil.i(AppConfig.TAG, "MobileTina: expired JSON configuration replaced successfully")
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "MobileTina: failed to apply expired configuration", e)
