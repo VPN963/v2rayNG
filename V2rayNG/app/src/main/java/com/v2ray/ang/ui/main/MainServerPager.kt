@@ -73,9 +73,6 @@ fun GroupPagerPage(
     lazyListStates: MutableMap<String, LazyListState>,
     lazyGridStates: MutableMap<String, LazyGridState>,
     onSelectServer: (String) -> Unit,
-    onEditServer: (String, ProfileItem) -> Unit,
-    onShareServer: (String, ProfileItem) -> Unit,
-    onMoreServer: (String, ProfileItem) -> Unit,
     onRemoveServer: (String) -> Unit,
     contentPadding: PaddingValues
 ) {
@@ -95,9 +92,6 @@ fun GroupPagerPage(
         lazyListStates = lazyListStates,
         lazyGridStates = lazyGridStates,
         onSelectServer = onSelectServer,
-        onEditServer = onEditServer,
-        onShareServer = onShareServer,
-        onMoreServer = onMoreServer,
         onRemoveServer = onRemoveServer,
         onMoveServer = { fromIndex, toIndex -> mainViewModel.moveServer(groupId, fromIndex, toIndex) },
         contentPadding = contentPadding
@@ -116,9 +110,6 @@ private fun ServerListPage(
     lazyListStates: MutableMap<String, LazyListState>,
     lazyGridStates: MutableMap<String, LazyGridState>,
     onSelectServer: (String) -> Unit,
-    onEditServer: (String, ProfileItem) -> Unit,
-    onShareServer: (String, ProfileItem) -> Unit,
-    onMoreServer: (String, ProfileItem) -> Unit,
     onRemoveServer: (String) -> Unit,
     onMoveServer: (Int, Int) -> Unit,
     contentPadding: PaddingValues
@@ -147,11 +138,7 @@ private fun ServerListPage(
                         serverCache = serverCache,
                         selectedGuid = selectedGuid,
                         subscriptionId = subscriptionId,
-                        doubleColumnDisplay = true,
                         onSelectServer = onSelectServer,
-                        onEditServer = onEditServer,
-                        onShareServer = onShareServer,
-                        onMoreServer = onMoreServer,
                         onRemoveServer = onRemoveServer
                     )
                 }
@@ -202,9 +189,6 @@ private fun ServerListPage(
                                 selectedGuid = selectedGuid,
                                 subscriptionId = subscriptionId,
                                 onSelectServer = onSelectServer,
-                                onEditServer = onEditServer,
-                                onShareServer = onShareServer,
-                                onMoreServer = onMoreServer,
                                 onRemoveServer = onRemoveServer
                             )
                         }
@@ -216,9 +200,6 @@ private fun ServerListPage(
                         selectedGuid = selectedGuid,
                         subscriptionId = subscriptionId,
                         onSelectServer = onSelectServer,
-                        onEditServer = onEditServer,
-                        onShareServer = onShareServer,
-                        onMoreServer = onMoreServer,
                         onRemoveServer = onRemoveServer
                     )
                     ItemDivider()
@@ -234,9 +215,6 @@ private fun ServerItemRow(
     selectedGuid: String?,
     subscriptionId: String,
     onSelectServer: (String) -> Unit,
-    onEditServer: (String, ProfileItem) -> Unit,
-    onShareServer: (String, ProfileItem) -> Unit,
-    onMoreServer: (String, ProfileItem) -> Unit,
     onRemoveServer: (String) -> Unit
 ) {
     val profile = serverCache.profile
@@ -253,12 +231,8 @@ private fun ServerItemRow(
         testDelayMillis = serverCache.testDelayMillis,
         isSelected = serverCache.guid == selectedGuid,
         subscriptionRemarks = subRemarks,
-        doubleColumnDisplay = false,
         onClick = { onSelectServer(serverCache.guid) },
-        onShare = { onShareServer(serverCache.guid, profile) },
-        onEdit = { onEditServer(serverCache.guid, profile) },
-        onRemove = { onRemoveServer(serverCache.guid) },
-        onMore = { onMoreServer(serverCache.guid, profile) }
+        onRemove = { onRemoveServer(serverCache.guid) }
     )
 }
 
@@ -267,11 +241,7 @@ private fun ServerItemColumn(
     serverCache: ServersCache,
     selectedGuid: String?,
     subscriptionId: String,
-    doubleColumnDisplay: Boolean,
     onSelectServer: (String) -> Unit,
-    onEditServer: (String, ProfileItem) -> Unit,
-    onShareServer: (String, ProfileItem) -> Unit,
-    onMoreServer: (String, ProfileItem) -> Unit,
     onRemoveServer: (String) -> Unit
 ) {
     val profile = serverCache.profile
@@ -286,12 +256,8 @@ private fun ServerItemColumn(
             testDelayMillis = serverCache.testDelayMillis,
             isSelected = serverCache.guid == selectedGuid,
             subscriptionRemarks = subRemarks,
-            doubleColumnDisplay = doubleColumnDisplay,
             onClick = { onSelectServer(serverCache.guid) },
-            onEdit = { onEditServer(serverCache.guid, profile) },
-            onShare = { onShareServer(serverCache.guid, profile) },
-            onRemove = { onRemoveServer(serverCache.guid) },
-            onMore = { onMoreServer(serverCache.guid, profile) }
+            onRemove = { onRemoveServer(serverCache.guid) }
         )
         ItemDivider()
     }
@@ -305,12 +271,8 @@ fun ServerListItem(
     testDelayMillis: Long,
     isSelected: Boolean,
     subscriptionRemarks: String,
-    doubleColumnDisplay: Boolean,
     onClick: () -> Unit,
-    onEdit: () -> Unit,
-    onShare: () -> Unit,
     onRemove: () -> Unit,
-    onMore: () -> Unit,
     modifier: Modifier = Modifier,
     dragModifier: Modifier = Modifier
 ) {
@@ -352,15 +314,19 @@ fun ServerListItem(
                 .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(remarks, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (doubleColumnDisplay) {
-                    IconButton(onClick = onMore, Modifier.size(36.dp)) {
-                        Icon(painterResource(R.drawable.ic_more_vert_24dp), null, Modifier.size(24.dp))
-                    }
-                } else {
-                    IconButton(onClick = onShare, Modifier.size(36.dp)) { Icon(painterResource(R.drawable.ic_share_24dp), null, Modifier.size(24.dp)) }
-                    IconButton(onClick = onEdit, Modifier.size(36.dp)) { Icon(painterResource(R.drawable.ic_edit_24dp), null, Modifier.size(24.dp)) }
-                    IconButton(onClick = onRemove, Modifier.size(36.dp)) { Icon(painterResource(R.drawable.ic_delete_24dp), null, Modifier.size(24.dp)) }
+                Text(
+                    remarks,
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                IconButton(onClick = onRemove, Modifier.size(36.dp)) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_delete_24dp),
+                        contentDescription = stringResource(R.string.acc_delete),
+                        Modifier.size(24.dp)
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
@@ -372,14 +338,32 @@ fun ServerListItem(
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)), Alignment.Center
                     ) {
-                        Text(subscriptionRemarks.take(1).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            subscriptionRemarks.take(1).uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
-                Text(statistics, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    statistics,
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Spacer(modifier = Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(typeDescription, style = MaterialTheme.typography.bodySmall, color = colorConfigType, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    typeDescription,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorConfigType,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(
                     pingText,
                     style = MaterialTheme.typography.bodySmall,
