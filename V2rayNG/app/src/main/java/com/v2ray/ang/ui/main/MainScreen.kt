@@ -85,8 +85,6 @@ fun MainScreen(
         ?.let { MmkvManager.decodeServerAffiliationInfo(it)?.testDelayMillis }
         ?: 0L
 
-    // If JSON `_comment` expires while this screen is open, immediately rebuild groups and the
-    // selected server from MMKV. This avoids requiring an Activity restart to show the replacement.
     DisposableEffect(context, mainViewModel) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(receiverContext: Context?, intent: Intent?) {
@@ -119,11 +117,7 @@ fun MainScreen(
         if (confirmRemove) showRemoveConfirm = guid else onAction(MainAction.RemoveServer(guid))
     }
 
-    // Page 0 = Automatic mode, Page 1 = Manual mode.
     val modePagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
-
-    // Subscription pages live inside Manual mode. Horizontal gestures are disabled on this inner
-    // pager so left/right swipes are reserved for switching Automatic <-> Manual.
     val groupPagerState = rememberPagerState(
         initialPage = 0,
         pageCount = { groups.size.coerceAtLeast(1) }
@@ -334,7 +328,12 @@ fun MainScreen(
                                         selectedPingMillis = selectedPing,
                                         subscriptionRefreshKey = isLoading,
                                         onToggle = onSmartConnect,
-                                        onTestPing = { onAction(MainAction.TestCurrentServer) }
+                                        onTestPing = {
+                                            onAction(
+                                                if (isRunning) MainAction.TestCurrentServer
+                                                else MainAction.TestRealAllServers
+                                            )
+                                        }
                                     )
                                 }
                             }
@@ -409,7 +408,6 @@ private fun MobileTinaModeTabs(
     onAutomaticClick: () -> Unit,
     onManualClick: () -> Unit
 ) {
-    // Force the visual order requested by the product design: Manual on the left, Auto on the right.
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
             modifier = Modifier
