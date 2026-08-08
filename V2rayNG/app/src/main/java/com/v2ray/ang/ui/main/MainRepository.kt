@@ -131,6 +131,7 @@ class MainRepository(
             )
         }
         result += MmkvManager.decodeSubscriptions()
+            .filterNot { it.guid == AppConfig.DEFAULT_SUBSCRIPTION_ID }
         return result
     }
 
