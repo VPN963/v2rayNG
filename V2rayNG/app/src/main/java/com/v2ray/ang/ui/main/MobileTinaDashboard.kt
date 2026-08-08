@@ -48,17 +48,21 @@ fun MobileTinaDashboard(
     smartConnecting: Boolean,
     smartCountdownSeconds: Int,
     smartConnectionFailed: Boolean,
+    selectedSubscriptionId: String,
     selectedServerName: String,
     selectedServerDetails: String,
     selectedPingMillis: Long,
     onToggle: () -> Unit,
     onTestPing: () -> Unit
 ) {
-    val selectedSubscription = MmkvManager.getSelectServer()
-        ?.let(MmkvManager::decodeServerConfig)
-        ?.subscriptionId
-        ?.takeIf { it.isNotBlank() }
+    val selectedSubscription = selectedSubscriptionId
+        .takeIf { it.isNotBlank() }
         ?.let(MmkvManager::decodeSubscription)
+        ?: MmkvManager.getSelectServer()
+            ?.let(MmkvManager::decodeServerConfig)
+            ?.subscriptionId
+            ?.takeIf { it.isNotBlank() }
+            ?.let(MmkvManager::decodeSubscription)
 
     val totalBytes = selectedSubscription?.trafficTotalBytes ?: 0L
     val uploadBytes = selectedSubscription?.trafficUploadBytes ?: 0L
