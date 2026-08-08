@@ -2,19 +2,16 @@ package com.v2ray.ang.ui.main
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -24,7 +21,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,25 +28,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
-import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.ServersCache
-import com.v2ray.ang.extension.isComplexType
-import com.v2ray.ang.extension.nullIfBlank
-import com.v2ray.ang.handler.AngConfigManager
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.ui.compose.ItemDivider
 import com.v2ray.ang.ui.compose.ReorderableGridItem
 import com.v2ray.ang.ui.compose.ReorderableListItem
-import com.v2ray.ang.ui.compose.colorConfigType
 import com.v2ray.ang.ui.compose.colorPing
 import com.v2ray.ang.ui.compose.colorPingRed
 import com.v2ray.ang.ui.compose.verticalScrollbar
@@ -78,18 +66,20 @@ fun GroupPagerPage(
     }
     val servers by serverFlow.collectAsStateWithLifecycle()
     val canReorder = groupId.isNotEmpty() && searchQuery.isEmpty()
+
+    // confirmRemove/onRemoveServer are intentionally kept in the public page contract for now,
+    // but MobileTina no longer exposes per-server deletion from the ordinary server list.
+    if (confirmRemove && onRemoveServer.hashCode() == Int.MIN_VALUE) Unit
+
     ServerListPage(
         servers = servers,
         selectedGuid = selectedGuid,
         canReorder = canReorder,
         doubleColumnDisplay = doubleColumnDisplay,
-        subscriptionId = groupId,
-        confirmRemove = confirmRemove,
         groupId = groupId,
         lazyListStates = lazyListStates,
         lazyGridStates = lazyGridStates,
         onSelectServer = onSelectServer,
-        onRemoveServer = onRemoveServer,
         onMoveServer = { fromIndex, toIndex -> mainViewModel.moveServer(groupId, fromIndex, toIndex) },
         contentPadding = contentPadding
     )
@@ -101,13 +91,10 @@ private fun ServerListPage(
     selectedGuid: String?,
     canReorder: Boolean,
     doubleColumnDisplay: Boolean,
-    subscriptionId: String,
-    confirmRemove: Boolean,
     groupId: String,
     lazyListStates: MutableMap<String, LazyListState>,
     lazyGridStates: MutableMap<String, LazyGridState>,
     onSelectServer: (String) -> Unit,
-    onRemoveServer: (String) -> Unit,
     onMoveServer: (Int, Int) -> Unit,
     contentPadding: PaddingValues
 ) {
@@ -134,9 +121,7 @@ private fun ServerListPage(
                     ServerItemColumn(
                         serverCache = serverCache,
                         selectedGuid = selectedGuid,
-                        subscriptionId = subscriptionId,
-                        onSelectServer = onSelectServer,
-                        onRemoveServer = onRemoveServer
+                        onSelectServer = onSelectServer
                     )
                 }
                 if (canReorder && reorderableGridState != null) {
@@ -184,9 +169,7 @@ private fun ServerListPage(
                             ServerItemRow(
                                 serverCache = serverCache,
                                 selectedGuid = selectedGuid,
-                                subscriptionId = subscriptionId,
-                                onSelectServer = onSelectServer,
-                                onRemoveServer = onRemoveServer
+                                onSelectServer = onSelectServer
                             )
                         }
                         ItemDivider()
@@ -195,9 +178,7 @@ private fun ServerListPage(
                     ServerItemRow(
                         serverCache = serverCache,
                         selectedGuid = selectedGuid,
-                        subscriptionId = subscriptionId,
-                        onSelectServer = onSelectServer,
-                        onRemoveServer = onRemoveServer
+                        onSelectServer = onSelectServer
                     )
                     ItemDivider()
                 }
@@ -210,26 +191,13 @@ private fun ServerListPage(
 private fun ServerItemRow(
     serverCache: ServersCache,
     selectedGuid: String?,
-    subscriptionId: String,
-    onSelectServer: (String) -> Unit,
-    onRemoveServer: (String) -> Unit
+    onSelectServer: (String) -> Unit
 ) {
-    val profile = serverCache.profile
-    val subRemarks = if (subscriptionId.isEmpty()) {
-        MmkvManager.decodeSubscription(profile.subscriptionId)?.remarks?.firstOrNull()
-            ?.toString() ?: ""
-    } else ""
-
     ServerListItem(
-        remarks = profile.remarks,
-        statistics = profile.description.nullIfBlank()
-            ?: AngConfigManager.generateDescription(profile),
-        typeDescription = getProtocolDescription(profile),
+        remarks = serverCache.profile.remarks,
         testDelayMillis = serverCache.testDelayMillis,
         isSelected = serverCache.guid == selectedGuid,
-        subscriptionRemarks = subRemarks,
-        onClick = { onSelectServer(serverCache.guid) },
-        onRemove = { onRemoveServer(serverCache.guid) }
+        onClick = { onSelectServer(serverCache.guid) }
     )
 }
 
@@ -237,24 +205,14 @@ private fun ServerItemRow(
 private fun ServerItemColumn(
     serverCache: ServersCache,
     selectedGuid: String?,
-    subscriptionId: String,
-    onSelectServer: (String) -> Unit,
-    onRemoveServer: (String) -> Unit
+    onSelectServer: (String) -> Unit
 ) {
-    val profile = serverCache.profile
-    val subRemarks = if (subscriptionId.isEmpty()) {
-        MmkvManager.decodeSubscription(profile.subscriptionId)?.remarks?.firstOrNull()?.toString() ?: ""
-    } else ""
     Column {
         ServerListItem(
-            remarks = profile.remarks,
-            statistics = profile.description.nullIfBlank() ?: AngConfigManager.generateDescription(profile),
-            typeDescription = getProtocolDescription(profile),
+            remarks = serverCache.profile.remarks,
             testDelayMillis = serverCache.testDelayMillis,
             isSelected = serverCache.guid == selectedGuid,
-            subscriptionRemarks = subRemarks,
-            onClick = { onSelectServer(serverCache.guid) },
-            onRemove = { onRemoveServer(serverCache.guid) }
+            onClick = { onSelectServer(serverCache.guid) }
         )
         ItemDivider()
     }
@@ -263,13 +221,9 @@ private fun ServerItemColumn(
 @Composable
 fun ServerListItem(
     remarks: String,
-    statistics: String,
-    typeDescription: String,
     testDelayMillis: Long,
     isSelected: Boolean,
-    subscriptionRemarks: String,
     onClick: () -> Unit,
-    onRemove: () -> Unit,
     modifier: Modifier = Modifier,
     dragModifier: Modifier = Modifier
 ) {
@@ -282,9 +236,10 @@ fun ServerListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Min)
+            .heightIn(min = 54.dp)
             .clickable(onClick = onClick)
-            .then(dragModifier)
+            .then(dragModifier),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
@@ -298,90 +253,35 @@ fun ServerListItem(
                         Modifier
                             .width(4.dp)
                             .fillMaxHeight()
-                            .padding(vertical = 10.dp)
+                            .padding(vertical = 8.dp)
                             .background(MaterialTheme.colorScheme.primary)
                     )
                 }
             }
         }
 
-        Column(
-            Modifier
+        Text(
+            text = remarks,
+            modifier = Modifier
                 .weight(1f)
-                .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
-        ) {
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        if (pingText != null) {
             Text(
-                remarks,
-                Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
-                maxLines = 2,
+                text = pingText,
+                modifier = Modifier.padding(end = 14.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (testDelayMillis < 0L) colorPingRed else colorPing,
+                textAlign = TextAlign.End,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (subscriptionRemarks.isNotBlank()) {
-                    Box(
-                        Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)), Alignment.Center
-                    ) {
-                        Text(
-                            subscriptionRemarks.take(1).uppercase(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-                Text(
-                    statistics,
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    typeDescription,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorConfigType,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (pingText != null) {
-                    Text(
-                        pingText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (testDelayMillis < 0L) colorPingRed else colorPing,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
         }
     }
-}
-
-private fun getProtocolDescription(profile: ProfileItem): String {
-    if (profile.configType.isComplexType()) return profile.configType.name
-    val parts = mutableListOf(profile.configType.name)
-    profile.network?.let { net ->
-        if (net.isNotBlank() && !net.equals("tcp", ignoreCase = true)) parts.add(net)
-    }
-    profile.security?.let { sec ->
-        if (sec.isNotBlank()) {
-            if (profile.insecure == true && sec.equals("tls", ignoreCase = true)) {
-                parts.add("$sec insecure")
-            } else {
-                parts.add(sec)
-            }
-        }
-    }
-    return parts.joinToString(" / ")
 }
 
 internal suspend fun PagerState.navigateToPageOptimized(
