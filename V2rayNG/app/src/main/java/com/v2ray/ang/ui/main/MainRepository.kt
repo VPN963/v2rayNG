@@ -240,6 +240,7 @@ class MainRepository(
         )
         if (result.second > 0) {
             normalizeImportedSubscriptionRemarks()
+            MobileTinaSubscriptionInfo.refreshAll()
         }
         if (result.first > 0 || result.second > 0) {
             MobileTinaExpiryManager.rescheduleFromStoredConfigs(app)
