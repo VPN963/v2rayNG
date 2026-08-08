@@ -13,11 +13,15 @@ import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.AngApplication
@@ -33,6 +37,7 @@ import com.v2ray.ang.extension.toastError
 import com.v2ray.ang.extension.toastSuccess
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.MobileTinaResetManager
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.AboutActivity
@@ -206,6 +211,7 @@ class MainActivity : HelperBaseComponentActivity() {
     @Composable
     override fun ScreenContent() {
         var showAutomation by remember { mutableStateOf(false) }
+        var showResetConfirm by remember { mutableStateOf(false) }
 
         BackHandler { moveTaskToBack(false) }
         MainScreen(
@@ -232,16 +238,42 @@ class MainActivity : HelperBaseComponentActivity() {
                 }
             },
             onNavigate = { route ->
-                if (route == MainDestination.MobileTinaAutomation) {
-                    showAutomation = true
-                } else {
-                    navigateTo(route)
+                when (route) {
+                    MainDestination.MobileTinaAutomation -> showAutomation = true
+                    MainDestination.ResetVpn -> showResetConfirm = true
+                    else -> navigateTo(route)
                 }
             },
         )
 
         if (showAutomation) {
             MobileTinaAutomationDialog(onDismiss = { showAutomation = false })
+        }
+
+        if (showResetConfirm) {
+            AlertDialog(
+                onDismissRequest = { showResetConfirm = false },
+                title = { Text(stringResource(R.string.mobiletina_reset_title)) },
+                text = { Text(stringResource(R.string.mobiletina_reset_message)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showResetConfirm = false
+                            MobileTinaResetManager.reset(this@MainActivity)
+                            clearSmartConnectState()
+                            mainViewModel.onAction(MainAction.RefreshGroups)
+                            toast(R.string.mobiletina_reset_done)
+                        }
+                    ) {
+                        Text(stringResource(R.string.mobiletina_reset_confirm))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetConfirm = false }) {
+                        Text(stringResource(R.string.mobiletina_close))
+                    }
+                }
+            )
         }
     }
 
@@ -265,7 +297,8 @@ class MainActivity : HelperBaseComponentActivity() {
             MainDestination.Routing -> Intent(this, RoutingSettingActivity::class.java)
             MainDestination.UserAssets -> Intent(this, UserAssetActivity::class.java)
             MainDestination.Settings -> Intent(this, SettingsActivity::class.java)
-            MainDestination.MobileTinaAutomation -> return
+            MainDestination.MobileTinaAutomation,
+            MainDestination.ResetVpn -> return
             MainDestination.Logcat -> Intent(this, LogcatActivity::class.java)
             MainDestination.CheckUpdate -> Intent(this, CheckUpdateActivity::class.java)
             MainDestination.BackupRestore -> Intent(this, BackupActivity::class.java)
