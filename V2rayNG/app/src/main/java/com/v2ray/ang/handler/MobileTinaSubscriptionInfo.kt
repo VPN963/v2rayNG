@@ -27,6 +27,18 @@ object MobileTinaSubscriptionInfo {
             }
     }
 
+    fun refresh(subscriptionId: String) {
+        val item = MmkvManager.decodeSubscription(subscriptionId) ?: return
+        if (!item.enabled || item.url.isBlank()) return
+        runCatching { refreshOne(subscriptionId, item) }
+            .onFailure {
+                LogUtil.d(
+                    AppConfig.TAG,
+                    "MobileTina subscription metadata refresh failed for ${item.remarks}: ${it.message}"
+                )
+            }
+    }
+
     private fun refreshOne(guid: String, item: SubscriptionItem) {
         val httpPort = SettingsManager.getHttpPort()
         val proxyUsername = SettingsManager.getSocksUsername()
