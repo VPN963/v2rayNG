@@ -14,7 +14,7 @@ import com.google.gson.JsonParser
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.entities.SubscriptionItem
 import com.v2ray.ang.helper.MessageHelper
-import com.v2ray.ang.receiver.MobileTinaExpiryReceiver
+import com.v2ray.ang.receiver.BootReceiver
 import com.v2ray.ang.util.LogUtil
 import java.time.Instant
 import java.time.LocalDateTime
@@ -32,19 +32,24 @@ import java.util.concurrent.TimeUnit
 object MobileTinaExpiryManager {
 
     const val DATA_CHANGED_MARKER = "mobiletina_data_changed"
+    const val ACTION_EXPIRE = "com.v2ray.mobiletina.action.CONFIG_EXPIRE"
 
     private const val PREFS_NAME = "mobiletina_config_expiry"
     private const val KEY_TRIGGER_AT_MILLIS = "trigger_at_millis"
     private const val UNIQUE_FALLBACK_WORK = "mobiletina_config_expiry_fallback"
     private const val ALARM_REQUEST_CODE = 96323
-    private const val ACTION_EXPIRE = "com.v2ray.mobiletina.action.CONFIG_EXPIRE"
     private const val EXPIRED_SUBSCRIPTION_ID = "mobiletina_expired_subscription"
     private const val EXPIRED_REMARKS = "اشتراک منقضی شد"
     private const val EXPIRED_CONFIG = "socks://Og@1:1#%D8%A7%D8%B4%D8%AA%D8%B1%D8%A7%DA%A9%20%D9%85%D9%86%D9%82%D8%B6%DB%8C%20%D8%B4%D8%AF"
 
-    /** Inspect imported JSON and schedule its expiry if a supported `_comment` timestamp exists. */
+    /** Inspect one imported JSON payload and schedule its expiry if supported. */
     fun scheduleFromImportedText(context: Context, configText: String?) {
-        val triggerAt = extractTriggerAtMillis(configText) ?: return
+        scheduleFromImportedTexts(context, listOf(configText))
+    }
+
+    /** Inspect multiple imported/raw payloads and schedule the earliest declared expiry. */
+    fun scheduleFromImportedTexts(context: Context, configTexts: Iterable<String?>) {
+        val triggerAt = configTexts.mapNotNull(::extractTriggerAtMillis).minOrNull() ?: return
         schedule(context.applicationContext, triggerAt)
     }
 
@@ -67,7 +72,7 @@ object MobileTinaExpiryManager {
         cancelScheduledArtifacts(appContext)
     }
 
-    /** Called by the exact-alarm receiver and WorkManager fallback. */
+    /** Called by BootReceiver's exact-alarm action and WorkManager fallback. */
     @Synchronized
     fun executeIfDue(context: Context) {
         val appContext = context.applicationContext
@@ -196,7 +201,7 @@ object MobileTinaExpiryManager {
     }
 
     private fun expiryPendingIntent(context: Context): PendingIntent {
-        val intent = Intent(context, MobileTinaExpiryReceiver::class.java).apply {
+        val intent = Intent(context, BootReceiver::class.java).apply {
             action = ACTION_EXPIRE
         }
         return PendingIntent.getBroadcast(
