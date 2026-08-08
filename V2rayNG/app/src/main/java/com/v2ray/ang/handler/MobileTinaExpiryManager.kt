@@ -38,7 +38,7 @@ object MobileTinaExpiryManager {
     private const val ACTION_EXPIRE = "com.v2ray.mobiletina.action.CONFIG_EXPIRE"
     private const val EXPIRED_SUBSCRIPTION_ID = "mobiletina_expired_subscription"
     private const val EXPIRED_REMARKS = "اشتراک منقضی شد"
-    private const val EXPIRED_CONFIG = "socks://Og@1:1#%D8%A7%D8%B4%D8%AA%D8%B1%D8%A7%DA%A9%20%D9%85%D9%82%D8%B6%DB%8C%20%D8%B4%D8%AF"
+    private const val EXPIRED_CONFIG = "socks://Og@1:1#%D8%A7%D8%B4%D8%AA%D8%B1%D8%A7%DA%A9%20%D9%85%D9%86%D9%82%D8%B6%DB%8C%20%D8%B4%D8%AF"
 
     /** Inspect imported JSON and schedule its expiry if a supported `_comment` timestamp exists. */
     fun scheduleFromImportedText(context: Context, configText: String?) {
@@ -223,15 +223,30 @@ object MobileTinaExpiryManager {
     }
 
     private fun parseTimestamp(value: String): Long? {
-        runCatching { return Instant.parse(value).toEpochMilli() }
-        runCatching { return OffsetDateTime.parse(value, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant().toEpochMilli() }
-        runCatching { return ZonedDateTime.parse(value, DateTimeFormatter.ISO_ZONED_DATE_TIME).toInstant().toEpochMilli() }
-        return runCatching {
+        try {
+            return Instant.parse(value).toEpochMilli()
+        } catch (_: Exception) {
+        }
+        try {
+            return OffsetDateTime.parse(value, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                .toInstant()
+                .toEpochMilli()
+        } catch (_: Exception) {
+        }
+        try {
+            return ZonedDateTime.parse(value, DateTimeFormatter.ISO_ZONED_DATE_TIME)
+                .toInstant()
+                .toEpochMilli()
+        } catch (_: Exception) {
+        }
+        return try {
             LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
                 .atZone(ZoneId.systemDefault())
                 .toInstant()
                 .toEpochMilli()
-        }.getOrNull()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun prefs(context: Context) =
