@@ -24,4 +24,8 @@
     <string name="mobiletina_tap_for_ping" translatable="false">برای بررسی پینگ لمس کنید</string>
     <string name="mobiletina_countdown_format" translatable="false">%1$d</string>
     <string name="mobiletina_manual_smart_connect" translatable="false">اتصال خودکار</string>
+    <string name="mobiletina_subscription_status" translatable="false">وضعیت اشتراک</string>
+    <string name="mobiletina_subscription_used" translatable="false">مصرف‌شده: %1$s</string>
+    <string name="mobiletina_subscription_remaining" translatable="false">باقی‌مانده: %1$s از %2$s</string>
+    <string name="mobiletina_subscription_expire" translatable="false">انقضا: %1$s</string>
 </resources>
