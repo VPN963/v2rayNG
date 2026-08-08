@@ -69,8 +69,11 @@ fun MainTopBar(
         },
         actions = {
             if (!showSearch) {
-                IconButton(onClick = { onSearchToggle(true) }) {
-                    Icon(painterResource(R.drawable.ic_search_24dp), contentDescription = stringResource(R.string.acc_search))
+                IconButton(onClick = { onAction(MainAction.ImportQRcode) }) {
+                    Icon(
+                        painterResource(R.drawable.ic_scan_24dp),
+                        contentDescription = stringResource(R.string.acc_qr_code)
+                    )
                 }
             }
             Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
