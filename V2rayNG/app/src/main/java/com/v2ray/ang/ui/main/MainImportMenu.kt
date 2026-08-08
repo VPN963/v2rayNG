@@ -2,13 +2,9 @@ package com.v2ray.ang.ui.main
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
 import com.v2ray.ang.R
-import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
-import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.ui.compose.AppDropdownMenuItems
-import com.v2ray.ang.ui.compose.SelectListDialog
 
 private enum class ImportMenuAction(@StringRes val labelRes: Int, val action: MainAction) {
     QRCode(R.string.menu_item_import_config_qrcode, MainAction.ImportQRcode),
@@ -31,31 +27,11 @@ enum class MainMoreMenuAction(@StringRes val labelRes: Int) {
     DeleteAll(R.string.title_del_all_config),
     DeleteDuplicate(R.string.title_del_duplicate_config),
     DeleteInvalid(R.string.title_del_invalid_config),
-    ExportAll(R.string.title_export_all),
     LocateSelected(R.string.title_locate_selected_config),
     SortByTestResults(R.string.title_sort_by_test_results),
     TestAll(R.string.title_ping_all_server),
     TestAllRealPing(R.string.title_real_ping_all_server),
     UpdateSubscriptions(R.string.title_sub_update)
-}
-
-internal enum class ServerMenuAction(
-    @StringRes val labelRes: Int,
-    val isShareAction: Boolean,
-    val supportsComplexProfiles: Boolean,
-) {
-    ShareQRCode(R.string.share_method_qrcode, isShareAction = true, supportsComplexProfiles = false),
-    ShareClipboard(R.string.share_method_clipboard, isShareAction = true, supportsComplexProfiles = false),
-    ShareFullContent(R.string.share_method_full_content, isShareAction = true, supportsComplexProfiles = true),
-    Edit(R.string.action_edit, isShareAction = false, supportsComplexProfiles = true),
-    Delete(R.string.action_delete, isShareAction = false, supportsComplexProfiles = true),
-}
-
-internal fun serverMenuActions(
-    isComplexProfile: Boolean,
-    includeManagementActions: Boolean,
-): List<ServerMenuAction> = ServerMenuAction.entries.filter { action ->
-    (includeManagementActions || action.isShareAction) && (!isComplexProfile || action.supportsComplexProfiles)
 }
 
 @Composable
@@ -71,33 +47,3 @@ fun MoreMenuContent(onSelected: (MainMoreMenuAction) -> Unit) = AppDropdownMenuI
     labelRes = { it.labelRes },
     onSelected = onSelected
 )
-
-@Composable
-fun ShareMethodDialog(
-    guid: String,
-    profile: ProfileItem,
-    more: Boolean,
-    onDismiss: () -> Unit,
-    onAction: (MainAction) -> Unit,
-    onRemove: (String) -> Unit,
-) {
-    val menuActions = serverMenuActions(
-        isComplexProfile = profile.configType.isComplexType(),
-        includeManagementActions = more,
-    )
-    SelectListDialog(
-        options = menuActions,
-        optionText = { stringResource(it.labelRes) },
-        onSelected = { action ->
-            onDismiss()
-            when (action) {
-                ServerMenuAction.ShareQRCode -> onAction(MainAction.ShareQRCode(guid))
-                ServerMenuAction.ShareClipboard -> onAction(MainAction.ShareClipboard(guid))
-                ServerMenuAction.ShareFullContent -> onAction(MainAction.ShareFullContent(guid))
-                ServerMenuAction.Edit -> onAction(MainAction.EditServer(guid, profile))
-                ServerMenuAction.Delete -> onRemove(guid)
-            }
-        },
-        onDismiss = onDismiss
-    )
-}
