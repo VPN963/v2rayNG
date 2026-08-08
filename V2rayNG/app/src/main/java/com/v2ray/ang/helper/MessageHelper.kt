@@ -39,10 +39,12 @@ object MessageHelper {
     }
 
     /**
-     * Sends a message to the test service.
+     * Sends a message to the short-lived real-delay test service.
      *
-     * @param ctx The context.
-     * @param message The test service message containing key, subscriptionId, and serverGuids.
+     * MobileTina intentionally runs CoreTestService as a normal started service while the app is
+     * in the foreground. This removes the user-visible Real Delay foreground notification. The
+     * service is used only for UI-triggered ping tests and Smart Connect, and stops itself after
+     * the test batch finishes.
      */
     fun sendMsg2TestService(ctx: Context, message: TestServiceMessage) {
         try {
@@ -50,22 +52,14 @@ object MessageHelper {
             intent.component = ComponentName(ctx, CoreTestService::class.java)
             intent.putExtra("content", message)
             when (message.key) {
-                AppConfig.MSG_MEASURE_CONFIG_START -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        ContextCompat.startForegroundService(ctx, intent)
-                    } else {
-                        ctx.startService(intent)
-                    }
-                }
+                AppConfig.MSG_MEASURE_CONFIG_START -> ctx.startService(intent)
 
                 AppConfig.MSG_MEASURE_CONFIG_CANCEL -> {
                     // Do not wake up service just to cancel; stop only if it is already running.
                     ctx.stopService(intent)
                 }
 
-                else -> {
-                    ctx.startService(intent)
-                }
+                else -> ctx.startService(intent)
             }
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to send message to test service", e)
