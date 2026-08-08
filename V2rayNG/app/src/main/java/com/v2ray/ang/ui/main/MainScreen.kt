@@ -14,14 +14,18 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -50,6 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     mainViewModel: MainViewModel,
@@ -299,72 +304,90 @@ fun MainScreen(
                 ) { modePage ->
                     when (modePage) {
                         0 -> {
-                            MobileTinaDashboard(
-                                isRunning = isRunning,
-                                smartConnecting = smartConnecting,
-                                smartCountdownSeconds = smartCountdownSeconds,
-                                smartConnectionFailed = smartConnectionFailed,
-                                selectedServerName = selectedProfile?.remarks.orEmpty(),
-                                selectedServerDetails = selectedProfile?.server.orEmpty(),
-                                selectedPingMillis = selectedPing,
-                                onToggle = onSmartConnect,
-                                onTestPing = { onAction(MainAction.TestCurrentServer) }
-                            )
+                            PullToRefreshBox(
+                                isRefreshing = isLoading,
+                                onRefresh = { onAction(MainAction.UpdateSubscriptions) },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    MobileTinaDashboard(
+                                        isRunning = isRunning,
+                                        smartConnecting = smartConnecting,
+                                        smartCountdownSeconds = smartCountdownSeconds,
+                                        smartConnectionFailed = smartConnectionFailed,
+                                        selectedServerName = selectedProfile?.remarks.orEmpty(),
+                                        selectedServerDetails = selectedProfile?.server.orEmpty(),
+                                        selectedPingMillis = selectedPing,
+                                        onToggle = onSmartConnect,
+                                        onTestPing = { onAction(MainAction.TestCurrentServer) }
+                                    )
+                                }
+                            }
                         }
 
                         1 -> {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                if (groups.size > 1) {
-                                    GroupTabBar(
-                                        groups = groups,
-                                        selectedTabIndex = groupPagerState.currentPage.coerceIn(0, groups.lastIndex),
-                                        mainViewModel = mainViewModel,
-                                        onTabClick = { targetIndex ->
-                                            scope.launch {
-                                                groupPagerState.navigateToPageOptimized(
-                                                    targetPage = targetIndex,
-                                                    animateAdjacentPage = true
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-
-                                if (groups.isNotEmpty()) {
-                                    HorizontalPager(
-                                        state = groupPagerState,
-                                        modifier = Modifier.fillMaxSize(),
-                                        userScrollEnabled = false,
-                                        beyondViewportPageCount = 1,
-                                        key = { page -> groups.getOrNull(page)?.id ?: "group-page-$page" }
-                                    ) { page ->
-                                        val group = groups.getOrNull(page) ?: return@HorizontalPager
-
-                                        GroupPagerPage(
-                                            groupId = group.id,
+                            PullToRefreshBox(
+                                isRefreshing = isLoading,
+                                onRefresh = { onAction(MainAction.UpdateSubscriptions) },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    if (groups.size > 1) {
+                                        GroupTabBar(
+                                            groups = groups,
+                                            selectedTabIndex = groupPagerState.currentPage.coerceIn(0, groups.lastIndex),
                                             mainViewModel = mainViewModel,
-                                            selectedGuid = selectedGuid,
-                                            doubleColumnDisplay = doubleColumnDisplay,
-                                            confirmRemove = confirmRemove,
-                                            searchQuery = searchQuery,
-                                            lazyListStates = lazyListStates,
-                                            lazyGridStates = lazyGridStates,
-                                            onSelectServer = { guid -> onAction(MainAction.SelectServer(guid)) },
-                                            onEditServer = { guid, profile -> onAction(MainAction.EditServer(guid, profile)) },
-                                            onShareServer = { guid, profile ->
-                                                shareTarget = Triple(guid, profile, false)
-                                            },
-                                            onMoreServer = { guid, profile ->
-                                                shareTarget = Triple(guid, profile, true)
-                                            },
-                                            onRemoveServer = removeServer,
-                                            contentPadding = PaddingValues(
-                                                start = 0.dp,
-                                                top = 4.dp,
-                                                end = 0.dp,
-                                                bottom = 16.dp
-                                            )
+                                            onTabClick = { targetIndex ->
+                                                scope.launch {
+                                                    groupPagerState.navigateToPageOptimized(
+                                                        targetPage = targetIndex,
+                                                        animateAdjacentPage = true
+                                                    )
+                                                }
+                                            }
                                         )
+                                    }
+
+                                    if (groups.isNotEmpty()) {
+                                        HorizontalPager(
+                                            state = groupPagerState,
+                                            modifier = Modifier.fillMaxSize(),
+                                            userScrollEnabled = false,
+                                            beyondViewportPageCount = 1,
+                                            key = { page -> groups.getOrNull(page)?.id ?: "group-page-$page" }
+                                        ) { page ->
+                                            val group = groups.getOrNull(page) ?: return@HorizontalPager
+
+                                            GroupPagerPage(
+                                                groupId = group.id,
+                                                mainViewModel = mainViewModel,
+                                                selectedGuid = selectedGuid,
+                                                doubleColumnDisplay = doubleColumnDisplay,
+                                                confirmRemove = confirmRemove,
+                                                searchQuery = searchQuery,
+                                                lazyListStates = lazyListStates,
+                                                lazyGridStates = lazyGridStates,
+                                                onSelectServer = { guid -> onAction(MainAction.SelectServer(guid)) },
+                                                onEditServer = { guid, profile -> onAction(MainAction.EditServer(guid, profile)) },
+                                                onShareServer = { guid, profile ->
+                                                    shareTarget = Triple(guid, profile, false)
+                                                },
+                                                onMoreServer = { guid, profile ->
+                                                    shareTarget = Triple(guid, profile, true)
+                                                },
+                                                onRemoveServer = removeServer,
+                                                contentPadding = PaddingValues(
+                                                    start = 0.dp,
+                                                    top = 4.dp,
+                                                    end = 0.dp,
+                                                    bottom = 16.dp
+                                                )
+                                            )
+                                        }
                                     }
                                 }
                             }
