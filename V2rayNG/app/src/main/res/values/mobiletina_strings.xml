@@ -16,6 +16,7 @@
     <string name="mobiletina_no_working_server">هیچ سرور فعالی با پینگ معتبر پیدا نشد.</string>
     <string name="mobiletina_ping_format">%1$d</string>
     <string name="mobiletina_ping_unknown">—</string>
+    <string name="mobiletina_ping_inactive" translatable="false">غیرفعال</string>
     <string name="mobiletina_enable_internet" translatable="false">لطفا اینترنت را روشن کنید</string>
     <string name="mobiletina_mode_auto" translatable="false">حالت خودکار</string>
     <string name="mobiletina_mode_manual" translatable="false">حالت دستی</string>
