@@ -36,8 +36,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.dto.entities.ServersCache
-import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.MobileTinaHiddenShareManager
 import com.v2ray.ang.ui.compose.colorFabActive
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
@@ -183,10 +183,7 @@ private fun SubscriptionSecretDialog(
 
                 Button(
                     onClick = {
-                        AngConfigManager.shareNonCustomConfigsToClipboard(
-                            context,
-                            MmkvManager.decodeServerList(subscriptionId)
-                        )
+                        MobileTinaHiddenShareManager.copyAllConfigs(context, subscriptionId)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
