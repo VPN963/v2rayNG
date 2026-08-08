@@ -57,9 +57,11 @@ class MainRepository(
                 )
 
                 AppConfig.MSG_STATE_STOP_SUCCESS -> MainServiceEvent.StateStopSuccess
-                AppConfig.MSG_MEASURE_DELAY_SUCCESS -> MainServiceEvent.MeasureDelaySuccess(
-                    safeIntent.getStringExtra("content").orEmpty()
-                )
+                AppConfig.MSG_MEASURE_DELAY_SUCCESS -> {
+                    val content = safeIntent.getStringExtra("content").orEmpty()
+                    persistCurrentServerPing(content)
+                    MainServiceEvent.MeasureDelaySuccess(content)
+                }
 
                 AppConfig.MSG_MEASURE_CONFIG_SUCCESS -> MainServiceEvent.MeasureConfigSuccess
                 AppConfig.MSG_MEASURE_CONFIG_NOTIFY -> MainServiceEvent.MeasureConfigNotify(
@@ -92,6 +94,32 @@ class MainRepository(
             Utils.receiverFlags()
         )
         MessageHelper.sendMsg2Service(app, AppConfig.MSG_REGISTER_CLIENT, "")
+    }
+
+    private fun persistCurrentServerPing(content: String) {
+        val guid = MmkvManager.getSelectServer() ?: return
+        val firstLine = content.lineSequence().firstOrNull().orEmpty()
+        val normalized = buildString(firstLine.length) {
+            firstLine.forEach { ch ->
+                append(
+                    when (ch) {
+                        '۰', '٠' -> '0'
+                        '۱', '١' -> '1'
+                        '۲', '٢' -> '2'
+                        '۳', '٣' -> '3'
+                        '۴', '٤' -> '4'
+                        '۵', '٥' -> '5'
+                        '۶', '٦' -> '6'
+                        '۷', '٧' -> '7'
+                        '۸', '٨' -> '8'
+                        '۹', '٩' -> '9'
+                        else -> ch
+                    }
+                )
+            }
+        }
+        val delay = Regex("""\d+""").find(normalized)?.value?.toLongOrNull() ?: return
+        MmkvManager.encodeServerTestDelayMillis(guid, delay)
     }
 
     override fun close() {
