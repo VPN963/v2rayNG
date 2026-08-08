@@ -61,14 +61,6 @@ fun MobileTinaDashboard(
             .padding(horizontal = 18.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        MobileTinaSubscriptionStatusCard(
-            selectedSubscriptionId = selectedSubscriptionId,
-            refreshKey = subscriptionRefreshKey,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(24.dp))
-
         MobileTinaAutoConnectButton(
             isRunning = isRunning,
             smartConnecting = smartConnecting,
@@ -92,6 +84,16 @@ fun MobileTinaDashboard(
                 overflow = TextOverflow.Ellipsis
             )
         }
+
+        Spacer(Modifier.height(26.dp))
+
+        // Subscription usage belongs at the bottom of Automatic mode so the primary action stays
+        // visually dominant and matches MobileTina's connection-first layout.
+        MobileTinaSubscriptionStatusCard(
+            selectedSubscriptionId = selectedSubscriptionId,
+            refreshKey = subscriptionRefreshKey,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
