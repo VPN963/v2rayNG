@@ -1,19 +1,30 @@
 package com.v2ray.ang.ui.main
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -24,8 +35,14 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.v2ray.ang.R
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.ui.compose.QRCodeDialog
@@ -36,6 +53,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun MainScreen(
     mainViewModel: MainViewModel,
+    smartConnecting: Boolean,
+    smartCountdownSeconds: Int,
+    smartConnectionFailed: Boolean,
+    onSmartConnect: () -> Unit,
     onAction: (MainAction) -> Unit,
     onNavigate: (MainDestination) -> Unit,
 ) {
@@ -67,7 +88,12 @@ fun MainScreen(
         if (confirmRemove) showRemoveConfirm = guid else onAction(MainAction.RemoveServer(guid))
     }
 
-    val pagerState = rememberPagerState(
+    // Page 0 = Automatic mode, Page 1 = Manual mode.
+    val modePagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+
+    // Subscription pages live inside Manual mode. Horizontal gestures are disabled on this inner
+    // pager so left/right swipes are reserved for switching Automatic <-> Manual.
+    val groupPagerState = rememberPagerState(
         initialPage = 0,
         pageCount = { groups.size.coerceAtLeast(1) }
     )
@@ -89,16 +115,16 @@ fun MainScreen(
         if (groups.isEmpty()) return@LaunchedEffect
         val selectedIndex = groups.indexOfFirst { it.id == uiState.selectedGroupId }
             .takeIf { it >= 0 } ?: 0
-        if (!pagerState.isScrollInProgress && pagerState.settledPage != selectedIndex) {
-            pagerState.scrollToPage(selectedIndex)
+        if (!groupPagerState.isScrollInProgress && groupPagerState.settledPage != selectedIndex) {
+            groupPagerState.scrollToPage(selectedIndex)
         }
     }
 
     val latestGroups by rememberUpdatedState(groups)
     val latestLocateInProgress by rememberUpdatedState(locateInProgress)
 
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.settledPage }
+    LaunchedEffect(groupPagerState) {
+        snapshotFlow { groupPagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
                 val currentGroups = latestGroups
@@ -110,15 +136,18 @@ fun MainScreen(
 
     LaunchedEffect(uiState.locateTarget) {
         val target = uiState.locateTarget ?: return@LaunchedEffect
-        if (target.groupIndex !in 0 until pagerState.pageCount) {
+        if (target.groupIndex !in 0 until groupPagerState.pageCount) {
             mainViewModel.onAction(MainAction.LocateHandled(target))
             return@LaunchedEffect
         }
 
         locateInProgress = true
         try {
-            if (pagerState.settledPage != target.groupIndex) {
-                pagerState.navigateToPageOptimized(
+            if (modePagerState.settledPage != 1) {
+                modePagerState.animateScrollToPage(1)
+            }
+            if (groupPagerState.settledPage != target.groupIndex) {
+                groupPagerState.navigateToPageOptimized(
                     targetPage = target.groupIndex,
                     animateAdjacentPage = false
                 )
@@ -234,7 +263,17 @@ fun MainScreen(
                     }
                 )
             },
-            bottomBar = {},
+            bottomBar = {
+                if (modePagerState.currentPage == 1) {
+                    MainBottomBar(
+                        displayText = uiState.statusText,
+                        isRunning = isRunning,
+                        isDarkTheme = isSystemInDarkTheme(),
+                        onAction = onAction,
+                        onSmartConnect = onSmartConnect
+                    )
+                }
+            },
             floatingActionButton = {},
         ) { innerPadding ->
             Column(
@@ -242,68 +281,158 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                MobileTinaDashboard(
-                    isRunning = isRunning,
-                    isTesting = uiState.isTesting,
-                    selectedServerName = selectedProfile?.remarks.orEmpty(),
-                    selectedPingMillis = selectedPing,
-                    onToggle = { onAction(MainAction.ToggleService) }
+                MobileTinaModeTabs(
+                    selectedPage = modePagerState.currentPage,
+                    onAutomaticClick = {
+                        scope.launch { modePagerState.animateScrollToPage(0) }
+                    },
+                    onManualClick = {
+                        scope.launch { modePagerState.animateScrollToPage(1) }
+                    }
                 )
 
-                if (groups.size > 1) {
-                    GroupTabBar(
-                        groups = groups,
-                        selectedTabIndex = pagerState.currentPage.coerceIn(0, groups.lastIndex),
-                        mainViewModel = mainViewModel,
-                        onTabClick = { targetIndex ->
-                            scope.launch {
-                                pagerState.navigateToPageOptimized(
-                                    targetPage = targetIndex,
-                                    animateAdjacentPage = true
-                                )
+                HorizontalPager(
+                    state = modePagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = true,
+                    beyondViewportPageCount = 1
+                ) { modePage ->
+                    when (modePage) {
+                        0 -> {
+                            MobileTinaDashboard(
+                                isRunning = isRunning,
+                                smartConnecting = smartConnecting,
+                                smartCountdownSeconds = smartCountdownSeconds,
+                                smartConnectionFailed = smartConnectionFailed,
+                                selectedServerName = selectedProfile?.remarks.orEmpty(),
+                                selectedServerDetails = selectedProfile?.server.orEmpty(),
+                                selectedPingMillis = selectedPing,
+                                onToggle = onSmartConnect,
+                                onTestPing = { onAction(MainAction.TestCurrentServer) }
+                            )
+                        }
+
+                        1 -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                if (groups.size > 1) {
+                                    GroupTabBar(
+                                        groups = groups,
+                                        selectedTabIndex = groupPagerState.currentPage.coerceIn(0, groups.lastIndex),
+                                        mainViewModel = mainViewModel,
+                                        onTabClick = { targetIndex ->
+                                            scope.launch {
+                                                groupPagerState.navigateToPageOptimized(
+                                                    targetPage = targetIndex,
+                                                    animateAdjacentPage = true
+                                                )
+                                            }
+                                        }
+                                    )
+                                }
+
+                                if (groups.isNotEmpty()) {
+                                    HorizontalPager(
+                                        state = groupPagerState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        userScrollEnabled = false,
+                                        beyondViewportPageCount = 1,
+                                        key = { page -> groups.getOrNull(page)?.id ?: "group-page-$page" }
+                                    ) { page ->
+                                        val group = groups.getOrNull(page) ?: return@HorizontalPager
+
+                                        GroupPagerPage(
+                                            groupId = group.id,
+                                            mainViewModel = mainViewModel,
+                                            selectedGuid = selectedGuid,
+                                            doubleColumnDisplay = doubleColumnDisplay,
+                                            confirmRemove = confirmRemove,
+                                            searchQuery = searchQuery,
+                                            lazyListStates = lazyListStates,
+                                            lazyGridStates = lazyGridStates,
+                                            onSelectServer = { guid -> onAction(MainAction.SelectServer(guid)) },
+                                            onEditServer = { guid, profile -> onAction(MainAction.EditServer(guid, profile)) },
+                                            onShareServer = { guid, profile ->
+                                                shareTarget = Triple(guid, profile, false)
+                                            },
+                                            onMoreServer = { guid, profile ->
+                                                shareTarget = Triple(guid, profile, true)
+                                            },
+                                            onRemoveServer = removeServer,
+                                            contentPadding = PaddingValues(
+                                                start = 0.dp,
+                                                top = 4.dp,
+                                                end = 0.dp,
+                                                bottom = 16.dp
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
-                    )
-                }
-
-                if (groups.isNotEmpty()) {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        userScrollEnabled = true,
-                        beyondViewportPageCount = 1,
-                        key = { page -> groups.getOrNull(page)?.id ?: "group-page-$page" }
-                    ) { page ->
-                        val group = groups.getOrNull(page) ?: return@HorizontalPager
-
-                        GroupPagerPage(
-                            groupId = group.id,
-                            mainViewModel = mainViewModel,
-                            selectedGuid = selectedGuid,
-                            doubleColumnDisplay = doubleColumnDisplay,
-                            confirmRemove = confirmRemove,
-                            searchQuery = searchQuery,
-                            lazyListStates = lazyListStates,
-                            lazyGridStates = lazyGridStates,
-                            onSelectServer = { guid -> onAction(MainAction.SelectServer(guid)) },
-                            onEditServer = { guid, profile -> onAction(MainAction.EditServer(guid, profile)) },
-                            onShareServer = { guid, profile ->
-                                shareTarget = Triple(guid, profile, false)
-                            },
-                            onMoreServer = { guid, profile ->
-                                shareTarget = Triple(guid, profile, true)
-                            },
-                            onRemoveServer = removeServer,
-                            contentPadding = PaddingValues(
-                                start = 0.dp,
-                                top = 4.dp,
-                                end = 0.dp,
-                                bottom = 16.dp
-                            )
-                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MobileTinaModeTabs(
+    selectedPage: Int,
+    onAutomaticClick: () -> Unit,
+    onManualClick: () -> Unit
+) {
+    // Force the visual order requested by the product design: Manual on the left, Auto on the right.
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            ModeTab(
+                text = stringResource(R.string.mobiletina_mode_manual),
+                selected = selectedPage == 1,
+                onClick = onManualClick,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            ModeTab(
+                text = stringResource(R.string.mobiletina_mode_auto),
+                selected = selectedPage == 0,
+                onClick = onAutomaticClick,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModeTab(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        tonalElevation = if (selected) 2.dp else 0.dp
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(vertical = 11.dp, horizontal = 8.dp),
+            textAlign = TextAlign.Center,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
     }
 }
