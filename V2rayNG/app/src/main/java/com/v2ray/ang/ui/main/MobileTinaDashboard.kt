@@ -18,6 +18,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +35,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.v2ray.ang.R
+import com.v2ray.ang.handler.MmkvManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.ln
+import kotlin.math.pow
 
 @Composable
 fun MobileTinaDashboard(
@@ -47,6 +54,20 @@ fun MobileTinaDashboard(
     onToggle: () -> Unit,
     onTestPing: () -> Unit
 ) {
+    val selectedSubscription = MmkvManager.getSelectServer()
+        ?.let(MmkvManager::decodeServerConfig)
+        ?.subscriptionId
+        ?.takeIf { it.isNotBlank() }
+        ?.let(MmkvManager::decodeSubscription)
+
+    val totalBytes = selectedSubscription?.trafficTotalBytes ?: 0L
+    val uploadBytes = selectedSubscription?.trafficUploadBytes ?: 0L
+    val downloadBytes = selectedSubscription?.trafficDownloadBytes ?: 0L
+    val usedBytes = (uploadBytes + downloadBytes).coerceAtLeast(0L)
+    val remainingBytes = (totalBytes - usedBytes).coerceAtLeast(0L)
+    val expireEpochSeconds = selectedSubscription?.expireEpochSeconds ?: 0L
+    val showSubscriptionInfo = totalBytes > 0L || expireEpochSeconds > 0L
+
     val targetButtonColor = when {
         isRunning -> Color(0xFF1976D2)
         smartConnecting -> Color(0xFFFFC107)
@@ -67,7 +88,18 @@ fun MobileTinaDashboard(
             .padding(horizontal = 18.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(20.dp))
+        if (showSubscriptionInfo) {
+            SubscriptionStatusCard(
+                remarks = selectedSubscription?.remarks.orEmpty(),
+                usedBytes = usedBytes,
+                totalBytes = totalBytes,
+                remainingBytes = remainingBytes,
+                expireEpochSeconds = expireEpochSeconds
+            )
+            Spacer(Modifier.height(24.dp))
+        } else {
+            Spacer(Modifier.height(20.dp))
+        }
 
         FloatingActionButton(
             onClick = onToggle,
@@ -229,5 +261,102 @@ fun MobileTinaDashboard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SubscriptionStatusCard(
+    remarks: String,
+    usedBytes: Long,
+    totalBytes: Long,
+    remainingBytes: Long,
+    expireEpochSeconds: Long
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 15.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.mobiletina_subscription_status),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (remarks.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = remarks,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (totalBytes > 0L) {
+                Spacer(Modifier.height(12.dp))
+                val progress = (usedBytes.toDouble() / totalBytes.toDouble())
+                    .coerceIn(0.0, 1.0)
+                    .toFloat()
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(
+                        R.string.mobiletina_subscription_remaining,
+                        formatBytes(remainingBytes),
+                        formatBytes(totalBytes)
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = stringResource(
+                        R.string.mobiletina_subscription_used,
+                        formatBytes(usedBytes)
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (expireEpochSeconds > 0L) {
+                Spacer(Modifier.height(if (totalBytes > 0L) 10.dp else 12.dp))
+                Text(
+                    text = stringResource(
+                        R.string.mobiletina_subscription_expire,
+                        formatExpiry(expireEpochSeconds)
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+private fun formatExpiry(epochSeconds: Long): String {
+    val millis = epochSeconds.coerceAtMost(Long.MAX_VALUE / 1000L) * 1000L
+    return SimpleDateFormat("yyyy/MM/dd  HH:mm", Locale.getDefault()).format(Date(millis))
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB", "PB")
+    val unitIndex = (ln(bytes.toDouble()) / ln(1024.0)).toInt()
+        .coerceIn(0, units.lastIndex)
+    val value = bytes / 1024.0.pow(unitIndex.toDouble())
+    return if (unitIndex == 0) {
+        "$bytes ${units[unitIndex]}"
+    } else {
+        String.format(Locale.getDefault(), "%.1f %s", value, units[unitIndex])
     }
 }
