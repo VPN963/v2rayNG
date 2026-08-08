@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.core.MobileTinaRealDelayCoordinator
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.TestServiceMessage
 import com.v2ray.ang.dto.entities.ProfileItem
@@ -70,6 +71,9 @@ class MainRepository(
                     if (content == MobileTinaExpiryManager.DATA_CHANGED_MARKER) {
                         MainServiceEvent.MeasureConfigFinish("0")
                     } else {
+                        // This receiver runs in the app process, so it safely bridges completion
+                        // from CoreTestService even when that service lives in another process.
+                        MobileTinaRealDelayCoordinator.notifyFinished()
                         MainServiceEvent.MeasureConfigFinish(content)
                     }
                 }
