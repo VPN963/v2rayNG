@@ -331,8 +331,8 @@ fun MainScreen(
                                         smartConnectionFailed = smartConnectionFailed,
                                         selectedSubscriptionId = uiState.selectedGroupId,
                                         selectedServerName = selectedProfile?.remarks.orEmpty(),
-                                        selectedServerDetails = selectedProfile?.server.orEmpty(),
                                         selectedPingMillis = selectedPing,
+                                        subscriptionRefreshKey = isLoading,
                                         onToggle = onSmartConnect,
                                         onTestPing = { onAction(MainAction.TestCurrentServer) }
                                     )
