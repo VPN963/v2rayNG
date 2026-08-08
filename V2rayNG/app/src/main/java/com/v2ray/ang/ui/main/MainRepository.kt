@@ -219,14 +219,14 @@ class MainRepository(
         return result
     }
 
-    override fun shareNonCustomConfigsToClipboard(guids: List<String>): Int =
-        AngConfigManager.shareNonCustomConfigsToClipboard(app, guids)
+    // Legacy public export/share entry points intentionally stay disabled in MobileTina.
+    // The only allowed reveal/copy path is the dedicated hidden 10-second subscription panel,
+    // which uses MobileTinaSecretExporter directly and does not pass through MainRepository.
+    override fun shareNonCustomConfigsToClipboard(guids: List<String>): Int = -1
 
-    override fun share2QRCode(guid: String): android.graphics.Bitmap? =
-        AngConfigManager.share2QRCode(guid)
+    override fun share2QRCode(guid: String): android.graphics.Bitmap? = null
 
-    override fun share2Clipboard(guid: String): Boolean =
-        AngConfigManager.share2Clipboard(app, guid) == 0
+    override fun share2Clipboard(guid: String): Boolean = false
 
     override fun sendMsg2Service(msgId: Int, content: String) =
         MessageHelper.sendMsg2Service(app, msgId, content)
