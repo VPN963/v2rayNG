@@ -21,6 +21,7 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.util.LogUtil
+import com.v2ray.ang.util.MobileTinaImportNormalizer
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -182,7 +183,11 @@ class MainRepository(
         server: String?,
         subscriptionId: String,
         updateUI: Boolean
-    ): Pair<Int, Int> = AngConfigManager.importBatchConfig(server, subscriptionId, updateUI)
+    ): Pair<Int, Int> = AngConfigManager.importBatchConfig(
+        MobileTinaImportNormalizer.normalize(server),
+        subscriptionId,
+        updateUI
+    )
 
     override fun updateConfigViaSubAll(): SubscriptionUpdateResult {
         val result = AngConfigManager.updateConfigViaSubAll()
