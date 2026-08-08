@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
@@ -249,7 +250,6 @@ private fun ServerItemRow(
         statistics = profile.description.nullIfBlank()
             ?: AngConfigManager.generateDescription(profile),
         typeDescription = getProtocolDescription(profile),
-        testResult = serverCache.testDelayString,
         testDelayMillis = serverCache.testDelayMillis,
         isSelected = serverCache.guid == selectedGuid,
         subscriptionRemarks = subRemarks,
@@ -283,7 +283,6 @@ private fun ServerItemColumn(
             remarks = profile.remarks,
             statistics = profile.description.nullIfBlank() ?: AngConfigManager.generateDescription(profile),
             typeDescription = getProtocolDescription(profile),
-            testResult = serverCache.testDelayString,
             testDelayMillis = serverCache.testDelayMillis,
             isSelected = serverCache.guid == selectedGuid,
             subscriptionRemarks = subRemarks,
@@ -303,7 +302,6 @@ fun ServerListItem(
     remarks: String,
     statistics: String,
     typeDescription: String,
-    testResult: String,
     testDelayMillis: Long,
     isSelected: Boolean,
     subscriptionRemarks: String,
@@ -316,6 +314,12 @@ fun ServerListItem(
     modifier: Modifier = Modifier,
     dragModifier: Modifier = Modifier
 ) {
+    val pingText = when {
+        testDelayMillis < 0L -> stringResource(R.string.mobiletina_ping_inactive)
+        testDelayMillis > 0L -> testDelayMillis.toString()
+        else -> stringResource(R.string.mobiletina_ping_unknown)
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -376,7 +380,13 @@ fun ServerListItem(
             Spacer(modifier = Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(typeDescription, style = MaterialTheme.typography.bodySmall, color = colorConfigType, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(testResult, style = MaterialTheme.typography.bodySmall, color = if (testDelayMillis < 0L) colorPingRed else colorPing, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    pingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (testDelayMillis < 0L) colorPingRed else colorPing,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
