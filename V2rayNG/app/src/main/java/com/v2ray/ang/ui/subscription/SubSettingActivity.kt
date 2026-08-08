@@ -1,10 +1,8 @@
 package com.v2ray.ang.ui.subscription
 
 import android.content.Intent
-import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.activity.viewModels
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,28 +38,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.extension.toast
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.MmkvManager.rememberMmkvBool
 import com.v2ray.ang.ui.base.BaseComponentActivity
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.DeleteConfirmDialog
 import com.v2ray.ang.ui.compose.ItemDivider
-import com.v2ray.ang.ui.compose.QRCodeDialog
 import com.v2ray.ang.ui.compose.ReorderableListItem
-import com.v2ray.ang.ui.compose.SelectListDialog
 import com.v2ray.ang.ui.compose.SettingsSwitchItem
 import com.v2ray.ang.ui.compose.colorFabActive
 import com.v2ray.ang.ui.compose.verticalScrollbar
-import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
-
-private enum class SubscriptionShareAction(@StringRes val labelRes: Int) {
-    QRCode(R.string.share_subscription_qrcode),
-    Clipboard(R.string.share_subscription_clipboard)
-}
 
 class SubSettingActivity : BaseComponentActivity() {
     private val viewModel: SubscriptionsViewModel by viewModels()
@@ -79,15 +68,7 @@ class SubSettingActivity : BaseComponentActivity() {
             onBackClick = { finish() },
             onAddClick = { startActivity(Intent(this, SubEditActivity::class.java)) },
             onSubUpdate = { viewModel.updateSubscriptions() },
-            onEditSub = { subId ->
-                startActivity(Intent(this, SubEditActivity::class.java).putExtra("subId", subId))
-            },
-            onRemoveSub = { subId -> removeSub(subId) },
-            onShareQRCode = { url -> QRCodeDecoder.createQRCode(url) },
-            onShareClipboard = { url ->
-                Utils.setClipboard(this, url)
-                toast(getString(R.string.toast_success))
-            }
+            onRemoveSub = { subId -> removeSub(subId) }
         )
     }
 
@@ -108,18 +89,12 @@ fun SubSettingScreen(
     onBackClick: () -> Unit,
     onAddClick: () -> Unit,
     onSubUpdate: () -> Unit,
-    onEditSub: (String) -> Unit,
-    onRemoveSub: (String) -> Unit,
-    onShareQRCode: (String) -> Bitmap?,
-    onShareClipboard: (String) -> Unit
+    onRemoveSub: (String) -> Unit
 ) {
     val subscriptions by viewModel.subsFlow.collectAsStateWithLifecycle()
     var showUpdateDialog by remember { mutableStateOf(false) }
     var removeTarget by remember { mutableStateOf<String?>(null) }
     val confirmRemove = MmkvManager.decodeSettingsBool(AppConfig.PREF_CONFIRM_REMOVE, false)
-
-    var shareTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var showQRCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -135,10 +110,16 @@ fun SubSettingScreen(
                 isLoading = isLoading,
                 actions = {
                     IconButton(onClick = onAddClick) {
-                        Icon(painterResource(R.drawable.ic_add_24dp), contentDescription = stringResource(R.string.acc_add_subscription))
+                        Icon(
+                            painterResource(R.drawable.ic_add_24dp),
+                            contentDescription = stringResource(R.string.acc_add_subscription)
+                        )
                     }
                     IconButton(onClick = { showUpdateDialog = true }) {
-                        Icon(painterResource(R.drawable.ic_restore_24dp), contentDescription = stringResource(R.string.acc_update_subscriptions))
+                        Icon(
+                            painterResource(R.drawable.ic_restore_24dp),
+                            contentDescription = stringResource(R.string.acc_update_subscriptions)
+                        )
                     }
                 }
             )
@@ -195,32 +176,14 @@ fun SubSettingScreen(
                                 horizontalAlignment = Alignment.End,
                                 modifier = Modifier.padding(start = 8.dp)
                             ) {
-                                Row {
-                                    if (subCache.subscription.url.isNotEmpty()) {
-                                        IconButton(onClick = {
-                                            shareTarget = Pair(subCache.guid, subCache.subscription.url)
-                                        }) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_share_24dp),
-                                                contentDescription = stringResource(R.string.acc_share_subscription)
-                                            )
-                                        }
-                                    }
-                                    IconButton(onClick = { onEditSub(subCache.guid) }) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_edit_24dp),
-                                            contentDescription = stringResource(R.string.acc_edit)
-                                        )
-                                    }
-                                    IconButton(onClick = {
-                                        if (confirmRemove) removeTarget = subCache.guid
-                                        else onRemoveSub(subCache.guid)
-                                    }) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_delete_24dp),
-                                            contentDescription = stringResource(R.string.acc_delete)
-                                        )
-                                    }
+                                IconButton(onClick = {
+                                    if (confirmRemove) removeTarget = subCache.guid
+                                    else onRemoveSub(subCache.guid)
+                                }) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_delete_24dp),
+                                        contentDescription = stringResource(R.string.acc_delete)
+                                    )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Switch(
@@ -245,30 +208,6 @@ fun SubSettingScreen(
         }
     }
 
-    if (shareTarget != null) {
-        val (_, url) = shareTarget!!
-        SelectListDialog(
-            options = SubscriptionShareAction.entries,
-            optionText = { stringResource(it.labelRes) },
-            onSelected = { action ->
-                shareTarget = null
-                when (action) {
-                    SubscriptionShareAction.QRCode -> showQRCodeBitmap = onShareQRCode(url)
-                    SubscriptionShareAction.Clipboard -> onShareClipboard(url)
-                }
-            },
-            onDismiss = { shareTarget = null }
-        )
-    }
-
-    // QR Code Dialog
-    if (showQRCodeBitmap != null) {
-        QRCodeDialog(
-            bitmap = showQRCodeBitmap,
-            onDismiss = { showQRCodeBitmap = null }
-        )
-    }
-
     if (removeTarget != null) {
         DeleteConfirmDialog(
             message = stringResource(R.string.confirm_delete_subscription_group),
@@ -281,11 +220,19 @@ fun SubSettingScreen(
     }
 
     if (showUpdateDialog) {
-
         var updateSubscription by rememberMmkvBool(AppConfig.PREF_UPDATE_SUBSCRIPTION, false)
-        var autoTestAfterUpdateSubscription by rememberMmkvBool(AppConfig.PREF_AUTO_TEST_AFTER_UPDATE_SUBSCRIPTION, false)
-        var autoRemoveInvalidAfterTest by rememberMmkvBool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)
-        var autoSortAfterTest by rememberMmkvBool(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)
+        var autoTestAfterUpdateSubscription by rememberMmkvBool(
+            AppConfig.PREF_AUTO_TEST_AFTER_UPDATE_SUBSCRIPTION,
+            false
+        )
+        var autoRemoveInvalidAfterTest by rememberMmkvBool(
+            AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST,
+            false
+        )
+        var autoSortAfterTest by rememberMmkvBool(
+            AppConfig.PREF_AUTO_SORT_AFTER_TEST,
+            false
+        )
 
         AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
