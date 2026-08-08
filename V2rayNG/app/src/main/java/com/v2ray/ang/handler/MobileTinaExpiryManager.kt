@@ -53,6 +53,26 @@ object MobileTinaExpiryManager {
         schedule(context.applicationContext, triggerAt)
     }
 
+    /**
+     * Rebuild the expiry schedule from the configs that actually exist in MMKV.
+     * This prevents a removed config from leaving a stale alarm behind and picks the earliest expiry
+     * when several custom JSON configs declare `_comment` timestamps.
+     */
+    fun rescheduleFromStoredConfigs(context: Context) {
+        val appContext = context.applicationContext
+        val triggerAt = MmkvManager.decodeAllServerList()
+            .asSequence()
+            .mapNotNull(MmkvManager::decodeServerRaw)
+            .mapNotNull(::extractTriggerAtMillis)
+            .minOrNull()
+
+        if (triggerAt == null) {
+            cancel(appContext)
+        } else {
+            schedule(appContext, triggerAt)
+        }
+    }
+
     /** Rebuild a pending alarm after reboot, package replacement or process recreation. */
     fun recoverPending(context: Context) {
         val appContext = context.applicationContext
