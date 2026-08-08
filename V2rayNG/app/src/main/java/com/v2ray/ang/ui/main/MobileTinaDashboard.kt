@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -292,11 +293,11 @@ internal fun MobileTinaSubscriptionStatusCard(
     modifier: Modifier = Modifier
 ) {
     val selectedSubscription = resolveSelectedSubscription(selectedSubscriptionId) ?: return
-    val totalBytes = selectedSubscription.trafficTotalBytes.coerceAtLeast(0L)
-    val uploadBytes = selectedSubscription.trafficUploadBytes.coerceAtLeast(0L)
-    val downloadBytes = selectedSubscription.trafficDownloadBytes.coerceAtLeast(0L)
+    val totalBytes = (selectedSubscription.trafficTotalBytes ?: 0L).coerceAtLeast(0L)
+    val uploadBytes = (selectedSubscription.trafficUploadBytes ?: 0L).coerceAtLeast(0L)
+    val downloadBytes = (selectedSubscription.trafficDownloadBytes ?: 0L).coerceAtLeast(0L)
     val usedBytes = (uploadBytes + downloadBytes).coerceAtLeast(0L)
-    val expireEpochSeconds = selectedSubscription.expireEpochSeconds.coerceAtLeast(0L)
+    val expireEpochSeconds = (selectedSubscription.expireEpochSeconds ?: 0L).coerceAtLeast(0L)
 
     if (totalBytes <= 0L && expireEpochSeconds <= 0L) return
 
