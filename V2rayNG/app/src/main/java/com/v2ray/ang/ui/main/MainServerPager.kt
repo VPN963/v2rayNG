@@ -65,11 +65,13 @@ fun GroupPagerPage(
         mainViewModel.serversForGroup(groupId)
     }
     val servers by serverFlow.collectAsStateWithLifecycle()
-    val canReorder = groupId.isNotEmpty() && searchQuery.isEmpty()
 
-    // confirmRemove/onRemoveServer are intentionally kept in the public page contract for now,
-    // but MobileTina no longer exposes per-server deletion from the ordinary server list.
-    if (confirmRemove && onRemoveServer.hashCode() == Int.MIN_VALUE) Unit
+    // MobileTina manual mode prioritizes reliable one-tap server selection. The upstream
+    // full-row long-press drag gesture could compete with click handling on some devices.
+    val canReorder = false
+
+    // confirmRemove/onRemoveServer/searchQuery remain in the contract for upstream compatibility.
+    if (confirmRemove && onRemoveServer.hashCode() == Int.MIN_VALUE && searchQuery.length == Int.MIN_VALUE) Unit
 
     ServerListPage(
         servers = servers,
