@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
@@ -22,10 +21,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,8 +50,8 @@ fun MobileTinaDashboard(
     smartConnectionFailed: Boolean,
     selectedSubscriptionId: String,
     selectedServerName: String,
-    selectedServerDetails: String,
     selectedPingMillis: Long,
+    subscriptionRefreshKey: Boolean,
     onToggle: () -> Unit,
     onTestPing: () -> Unit
 ) {
@@ -64,6 +63,7 @@ fun MobileTinaDashboard(
     ) {
         MobileTinaSubscriptionStatusCard(
             selectedSubscriptionId = selectedSubscriptionId,
+            refreshKey = subscriptionRefreshKey,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -74,17 +74,24 @@ fun MobileTinaDashboard(
             smartConnecting = smartConnecting,
             smartCountdownSeconds = smartCountdownSeconds,
             smartConnectionFailed = smartConnectionFailed,
-            onToggle = onToggle
-        )
-
-        Spacer(Modifier.height(28.dp))
-
-        MobileTinaSelectedServerCard(
             selectedServerName = selectedServerName,
-            selectedServerDetails = selectedServerDetails,
             selectedPingMillis = selectedPingMillis,
+            onToggle = onToggle,
             onTestPing = onTestPing
         )
+
+        if (selectedServerName.isNotBlank()) {
+            Spacer(Modifier.height(22.dp))
+            Text(
+                text = selectedServerName,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -94,7 +101,10 @@ private fun MobileTinaAutoConnectButton(
     smartConnecting: Boolean,
     smartCountdownSeconds: Int,
     smartConnectionFailed: Boolean,
-    onToggle: () -> Unit
+    selectedServerName: String,
+    selectedPingMillis: Long,
+    onToggle: () -> Unit,
+    onTestPing: () -> Unit
 ) {
     val targetButtonColor = when {
         isRunning -> Color(0xFF1976D2)
@@ -172,116 +182,54 @@ private fun MobileTinaAutoConnectButton(
         }
     }
 
-    Spacer(Modifier.height(16.dp))
-    Text(
-        text = when {
-            isRunning -> stringResource(R.string.mobiletina_status_connected)
-            smartConnecting -> stringResource(R.string.mobiletina_status_connecting)
-            smartConnectionFailed -> stringResource(R.string.mobiletina_status_failed)
-            else -> stringResource(R.string.mobiletina_status_disconnected)
-        },
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        textAlign = TextAlign.Center
-    )
+    Spacer(Modifier.height(14.dp))
 
-    if (smartConnecting) {
-        Spacer(Modifier.height(4.dp))
+    Column(
+        modifier = Modifier
+            .clickable(
+                enabled = selectedServerName.isNotBlank() && !smartConnecting,
+                onClick = onTestPing
+            )
+            .padding(horizontal = 18.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text(
-            text = stringResource(R.string.mobiletina_testing),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = when {
+                isRunning -> stringResource(R.string.mobiletina_status_connected)
+                smartConnecting -> stringResource(R.string.mobiletina_status_connecting)
+                smartConnectionFailed -> stringResource(R.string.mobiletina_status_failed)
+                else -> stringResource(R.string.mobiletina_status_disconnected)
+            },
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center
         )
-    }
-}
 
-@Composable
-internal fun MobileTinaSelectedServerCard(
-    selectedServerName: String,
-    selectedServerDetails: String,
-    selectedPingMillis: Long,
-    onTestPing: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(enabled = selectedServerName.isNotBlank(), onClick = onTestPing),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        if (smartConnecting) {
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = stringResource(R.string.mobiletina_connected_server),
-                style = MaterialTheme.typography.labelMedium,
+                text = stringResource(R.string.mobiletina_testing),
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(6.dp))
-
-            if (selectedServerName.isNotBlank()) {
-                Text(
-                    text = selectedServerName,
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (selectedServerDetails.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = selectedServerDetails,
-                        modifier = Modifier.fillMaxWidth(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Text(
-                        text = when {
-                            selectedPingMillis > 0L -> selectedPingMillis.toString()
-                            selectedPingMillis < 0L -> stringResource(R.string.mobiletina_ping_inactive)
-                            else -> stringResource(R.string.mobiletina_ping_unknown)
-                        },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-                }
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    text = stringResource(R.string.mobiletina_tap_for_ping),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.mobiletina_status_disconnected),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
+        } else if (selectedServerName.isNotBlank()) {
+            Spacer(Modifier.height(5.dp))
+            Text(
+                text = when {
+                    selectedPingMillis > 0L -> selectedPingMillis.toString()
+                    selectedPingMillis < 0L -> stringResource(R.string.mobiletina_ping_inactive)
+                    else -> stringResource(R.string.mobiletina_tap_for_ping)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (selectedPingMillis != 0L) FontWeight.Bold else FontWeight.Normal,
+                color = when {
+                    selectedPingMillis > 0L -> MaterialTheme.colorScheme.primary
+                    selectedPingMillis < 0L -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -289,9 +237,13 @@ internal fun MobileTinaSelectedServerCard(
 @Composable
 internal fun MobileTinaSubscriptionStatusCard(
     selectedSubscriptionId: String,
+    refreshKey: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val selectedSubscription = resolveSelectedSubscription(selectedSubscriptionId) ?: return
+    val selectedSubscription = remember(selectedSubscriptionId, refreshKey) {
+        resolveSelectedSubscription(selectedSubscriptionId)
+    } ?: return
+
     val totalBytes = (selectedSubscription.trafficTotalBytes ?: 0L).coerceAtLeast(0L)
     val uploadBytes = (selectedSubscription.trafficUploadBytes ?: 0L).coerceAtLeast(0L)
     val downloadBytes = (selectedSubscription.trafficDownloadBytes ?: 0L).coerceAtLeast(0L)
