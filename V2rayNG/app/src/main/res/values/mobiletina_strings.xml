@@ -28,4 +28,8 @@
     <string name="mobiletina_subscription_used" translatable="false">مصرف‌شده: %1$s</string>
     <string name="mobiletina_subscription_remaining" translatable="false">باقی‌مانده: %1$s از %2$s</string>
     <string name="mobiletina_subscription_expire" translatable="false">انقضا: %1$s</string>
+    <string name="mobiletina_subscription_secret_title" translatable="false">اشتراک</string>
+    <string name="mobiletina_copy_subscription_link" translatable="false">کپی لینک اشتراک</string>
+    <string name="mobiletina_copy_all_configs" translatable="false">کپی تمام کانفیگ‌ها</string>
+    <string name="mobiletina_close" translatable="false">بستن</string>
 </resources>
