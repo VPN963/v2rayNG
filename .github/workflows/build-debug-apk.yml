@@ -6,6 +6,7 @@ on:
     branches:
       - agent/debug-apk-build
       - agent/mobiletina-automation-v1
+      - agent/mobiletina-redesign-v2
 
 permissions:
   contents: read
