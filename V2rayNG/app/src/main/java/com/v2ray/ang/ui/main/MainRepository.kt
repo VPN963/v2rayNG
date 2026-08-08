@@ -16,6 +16,7 @@ import com.v2ray.ang.dto.entities.SubscriptionCache
 import com.v2ray.ang.dto.entities.SubscriptionItem
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.MobileTinaSubscriptionInfo
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.helper.MessageHelper
@@ -183,11 +184,17 @@ class MainRepository(
         updateUI: Boolean
     ): Pair<Int, Int> = AngConfigManager.importBatchConfig(server, subscriptionId, updateUI)
 
-    override fun updateConfigViaSubAll(): SubscriptionUpdateResult =
-        AngConfigManager.updateConfigViaSubAll()
+    override fun updateConfigViaSubAll(): SubscriptionUpdateResult {
+        val result = AngConfigManager.updateConfigViaSubAll()
+        MobileTinaSubscriptionInfo.refreshAll()
+        return result
+    }
 
-    override fun updateConfigViaSub(subscriptionCache: SubscriptionCache): SubscriptionUpdateResult =
-        AngConfigManager.updateConfigViaSub(subscriptionCache)
+    override fun updateConfigViaSub(subscriptionCache: SubscriptionCache): SubscriptionUpdateResult {
+        val result = AngConfigManager.updateConfigViaSub(subscriptionCache)
+        MobileTinaSubscriptionInfo.refresh(subscriptionCache.guid)
+        return result
+    }
 
     override fun shareNonCustomConfigsToClipboard(guids: List<String>): Int =
         AngConfigManager.shareNonCustomConfigsToClipboard(app, guids)
