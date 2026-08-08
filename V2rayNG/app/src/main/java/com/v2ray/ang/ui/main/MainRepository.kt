@@ -68,7 +68,7 @@ class MainRepository(
                 AppConfig.MSG_MEASURE_CONFIG_FINISH -> {
                     val content = safeIntent.getStringExtra("content")
                     if (content == MobileTinaExpiryManager.DATA_CHANGED_MARKER) {
-                        MainServiceEvent.MobileTinaDataChanged
+                        MainServiceEvent.MeasureConfigFinish("0")
                     } else {
                         MainServiceEvent.MeasureConfigFinish(content)
                     }
