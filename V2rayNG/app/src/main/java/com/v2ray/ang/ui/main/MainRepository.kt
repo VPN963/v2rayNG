@@ -122,6 +122,17 @@ class MainRepository(
         MmkvManager.encodeServerTestDelayMillis(guid, delay)
     }
 
+    private fun normalizeImportedSubscriptionRemarks(): List<SubscriptionCache> {
+        val subscriptions = MmkvManager.decodeSubscriptions()
+        subscriptions.forEach { cache ->
+            if (cache.subscription.remarks.equals(LEGACY_IMPORTED_SUBSCRIPTION_REMARK, ignoreCase = true)) {
+                cache.subscription.remarks = MOBILETINA_IMPORTED_SUBSCRIPTION_REMARK
+                MmkvManager.encodeSubscription(cache.guid, cache.subscription)
+            }
+        }
+        return subscriptions
+    }
+
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         runCatching {
@@ -170,7 +181,7 @@ class MainRepository(
                 }
             )
         }
-        result += MmkvManager.decodeSubscriptions()
+        result += normalizeImportedSubscriptionRemarks()
             .filterNot { it.guid == AppConfig.DEFAULT_SUBSCRIPTION_ID }
         return result
     }
@@ -227,6 +238,9 @@ class MainRepository(
             subscriptionId,
             updateUI
         )
+        if (result.second > 0) {
+            normalizeImportedSubscriptionRemarks()
+        }
         if (result.first > 0 || result.second > 0) {
             MobileTinaExpiryManager.rescheduleFromStoredConfigs(app)
         }
@@ -278,5 +292,10 @@ class MainRepository(
 
     override fun initAssets() {
         SettingsManager.initAssets(app, app.assets)
+    }
+
+    private companion object {
+        const val LEGACY_IMPORTED_SUBSCRIPTION_REMARK = "import sub"
+        const val MOBILETINA_IMPORTED_SUBSCRIPTION_REMARK = "instagram : mobile.tina"
     }
 }
