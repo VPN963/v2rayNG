@@ -14,5 +14,10 @@ data class SubscriptionItem(
     var allowInsecureUrl: Boolean = false,
     var userAgent: String? = null,
     var requestHeaders: String? = null,
-)
 
+    // Optional standard subscription-userinfo metadata. Null means the provider did not expose it.
+    var trafficUploadBytes: Long? = null,
+    var trafficDownloadBytes: Long? = null,
+    var trafficTotalBytes: Long? = null,
+    var expireEpochSeconds: Long? = null,
+)
