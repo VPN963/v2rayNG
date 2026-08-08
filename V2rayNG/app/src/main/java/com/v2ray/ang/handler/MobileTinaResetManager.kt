@@ -8,7 +8,10 @@ import com.v2ray.ang.util.LogUtil
 /** Destructive reset of user-imported VPN data while keeping app preferences and Android grants. */
 object MobileTinaResetManager {
 
-    fun reset(context: Context) {
+    fun reset(context: Context, cancelPendingExpiry: Boolean = true) {
+        if (cancelPendingExpiry) {
+            MobileTinaExpiryManager.cancel(context)
+        }
         LauncherManager.stopService(context)
 
         val subscriptions = MmkvManager.decodeSubscriptions().map { it.guid }
