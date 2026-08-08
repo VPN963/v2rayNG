@@ -25,8 +25,6 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
@@ -276,10 +273,10 @@ fun ServerListItem(
     modifier: Modifier = Modifier,
     dragModifier: Modifier = Modifier
 ) {
-    val pingText = when {
+    val pingText: String? = when {
         testDelayMillis < 0L -> stringResource(R.string.mobiletina_ping_inactive)
         testDelayMillis > 0L -> testDelayMillis.toString()
-        else -> stringResource(R.string.mobiletina_ping_unknown)
+        else -> null
     }
 
     Row(
@@ -313,22 +310,13 @@ fun ServerListItem(
                 .weight(1f)
                 .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    remarks,
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                IconButton(onClick = onRemove, Modifier.size(36.dp)) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_delete_24dp),
-                        contentDescription = stringResource(R.string.acc_delete),
-                        Modifier.size(24.dp)
-                    )
-                }
-            }
+            Text(
+                remarks,
+                Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             Spacer(modifier = Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (subscriptionRemarks.isNotBlank()) {
@@ -364,13 +352,15 @@ fun ServerListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    pingText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (testDelayMillis < 0L) colorPingRed else colorPing,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (pingText != null) {
+                    Text(
+                        pingText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (testDelayMillis < 0L) colorPingRed else colorPing,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
