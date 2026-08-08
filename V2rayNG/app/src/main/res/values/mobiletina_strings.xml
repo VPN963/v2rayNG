@@ -14,4 +14,5 @@
     <string name="mobiletina_no_working_server">No server with a valid real delay result was found.</string>
     <string name="mobiletina_ping_format">Ping %1$d ms</string>
     <string name="mobiletina_ping_unknown">Ping —</string>
+    <string name="mobiletina_enable_internet" translatable="false">لطفا اینترنت را روشن کنید</string>
 </resources>
