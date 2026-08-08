@@ -31,6 +31,8 @@ import java.util.concurrent.TimeUnit
  */
 object MobileTinaExpiryManager {
 
+    const val DATA_CHANGED_MARKER = "mobiletina_data_changed"
+
     private const val PREFS_NAME = "mobiletina_config_expiry"
     private const val KEY_TRIGGER_AT_MILLIS = "trigger_at_millis"
     private const val UNIQUE_FALLBACK_WORK = "mobiletina_config_expiry_fallback"
@@ -102,10 +104,11 @@ object MobileTinaExpiryManager {
             )
             MmkvManager.encodeSettings(AppConfig.CACHE_SUBSCRIPTION_ID, EXPIRED_SUBSCRIPTION_ID)
 
+            // Reuse the existing app-to-UI broadcast channel with a MobileTina marker.
             MessageHelper.sendMsg2UI(
                 appContext,
-                AppConfig.MSG_MOBILETINA_DATA_CHANGED,
-                "expired"
+                AppConfig.MSG_MEASURE_CONFIG_FINISH,
+                DATA_CHANGED_MARKER
             )
             LogUtil.i(AppConfig.TAG, "MobileTina: expired JSON configuration replaced successfully")
         } catch (e: Exception) {
