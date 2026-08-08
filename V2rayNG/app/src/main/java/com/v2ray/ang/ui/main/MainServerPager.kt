@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +29,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
@@ -244,21 +247,17 @@ fun ServerListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier
-                .width(10.dp)
-                .fillMaxHeight()
+            modifier = Modifier.width(12.dp),
+            contentAlignment = Alignment.Center
         ) {
             if (isSelected) {
-                Row {
-                    Spacer(Modifier.width(6.dp))
-                    Box(
-                        Modifier
-                            .width(4.dp)
-                            .fillMaxHeight()
-                            .padding(vertical = 8.dp)
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-                }
+                Box(
+                    Modifier
+                        .width(5.dp)
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFFF6D00))
+                )
             }
         }
 
