@@ -1,15 +1,14 @@
 package com.v2ray.ang.ui.main
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FloatingActionButton
@@ -36,13 +35,14 @@ import com.v2ray.ang.ui.compose.colorFabInactiveLight
 
 @Composable
 fun MainBottomBar(
+    selectedGuid: String?,
     displayText: String,
     isRunning: Boolean,
     isDarkTheme: Boolean,
     onAction: (MainAction) -> Unit,
     onSmartConnect: () -> Unit
 ) {
-    val selectedGuid = MmkvManager.getSelectServer()
+    // selectedGuid comes from MainUiState so this panel recomposes immediately after a manual tap.
     val selectedProfile = selectedGuid?.let(MmkvManager::decodeServerConfig)
     val selectedPing = selectedGuid
         ?.let { MmkvManager.decodeServerAffiliationInfo(it)?.testDelayMillis }
@@ -59,44 +59,86 @@ fun MainBottomBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (selectedProfile != null) {
+                // Keep the manual dock intentionally compact so the server list remains the focus.
+                FloatingActionButton(
+                    onClick = { onAction(MainAction.ToggleService) },
+                    modifier = Modifier.size(58.dp),
+                    shape = CircleShape,
+                    containerColor = if (isRunning) colorFabActive
+                    else if (isDarkTheme) colorFabInactiveDark
+                    else colorFabInactiveLight
+                ) {
+                    Icon(
+                        painter = if (isRunning) painterResource(R.drawable.ic_stop_24dp)
+                        else painterResource(R.drawable.ic_play_24dp),
+                        contentDescription = stringResource(
+                            if (isRunning) R.string.acc_stop else R.string.acc_start
+                        ),
+                        tint = Color.White,
+                        modifier = Modifier.size(27.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(5.dp))
+
+                Surface(
+                    modifier = Modifier.clickable(onClick = onSmartConnect),
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    tonalElevation = 1.dp
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = selectedProfile.remarks,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        Icon(
+                            painter = painterResource(R.drawable.ic_flash_on_24dp),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
                         )
-
-                        Surface(
-                            modifier = Modifier.clickable {
-                                onAction(MainAction.TestCurrentServer)
-                            },
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh
-                        ) {
-                            Text(
-                                text = when {
-                                    selectedPing > 0L -> selectedPing.toString()
-                                    selectedPing < 0L -> stringResource(R.string.mobiletina_ping_inactive)
-                                    else -> stringResource(R.string.mobiletina_ping_unknown)
-                                },
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        Text(
+                            text = stringResource(R.string.mobiletina_manual_smart_connect),
+                            modifier = Modifier.padding(start = 6.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
                     }
+                }
+
+                Spacer(Modifier.height(5.dp))
+
+                if (selectedProfile != null) {
+                    Text(
+                        text = selectedProfile.remarks,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        text = when {
+                            selectedPing > 0L -> selectedPing.toString()
+                            selectedPing < 0L -> stringResource(R.string.mobiletina_ping_inactive)
+                            else -> stringResource(R.string.mobiletina_ping_unknown)
+                        },
+                        modifier = Modifier
+                            .clickable { onAction(MainAction.TestCurrentServer) }
+                            .padding(horizontal = 12.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
                 } else if (displayText.isNotBlank()) {
                     Text(
                         text = displayText,
@@ -107,61 +149,6 @@ fun MainBottomBar(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 7.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FloatingActionButton(
-                        onClick = { onAction(MainAction.ToggleService) },
-                        modifier = Modifier.size(62.dp),
-                        shape = CircleShape,
-                        containerColor = if (isRunning) colorFabActive
-                        else if (isDarkTheme) colorFabInactiveDark
-                        else colorFabInactiveLight
-                    ) {
-                        Icon(
-                            painter = if (isRunning) painterResource(R.drawable.ic_stop_24dp)
-                            else painterResource(R.drawable.ic_play_24dp),
-                            contentDescription = stringResource(
-                                if (isRunning) R.string.acc_stop else R.string.acc_start
-                            ),
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-
-                    Spacer(Modifier.width(12.dp))
-
-                    Surface(
-                        modifier = Modifier.clickable(onClick = onSmartConnect),
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        tonalElevation = 2.dp
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_flash_on_24dp),
-                                contentDescription = null,
-                                modifier = Modifier.size(19.dp),
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Text(
-                                text = stringResource(R.string.mobiletina_manual_smart_connect),
-                                modifier = Modifier.padding(start = 6.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                    }
                 }
             }
         }
