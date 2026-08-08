@@ -35,14 +35,15 @@ import com.v2ray.ang.ui.compose.colorFabInactiveLight
 
 @Composable
 fun MainBottomBar(
-    selectedGuid: String?,
+    selectedGuid: String? = MmkvManager.getSelectServer(),
     displayText: String,
     isRunning: Boolean,
     isDarkTheme: Boolean,
     onAction: (MainAction) -> Unit,
     onSmartConnect: () -> Unit
 ) {
-    // selectedGuid comes from MainUiState so this panel recomposes immediately after a manual tap.
+    // The default is evaluated on each parent recomposition. MainScreen observes selectedGuid,
+    // therefore a manual server tap immediately refreshes this compact panel as well.
     val selectedProfile = selectedGuid?.let(MmkvManager::decodeServerConfig)
     val selectedPing = selectedGuid
         ?.let { MmkvManager.decodeServerAffiliationInfo(it)?.testDelayMillis }
@@ -62,7 +63,6 @@ fun MainBottomBar(
                     .padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Keep the manual dock intentionally compact so the server list remains the focus.
                 FloatingActionButton(
                     onClick = { onAction(MainAction.ToggleService) },
                     modifier = Modifier.size(58.dp),
