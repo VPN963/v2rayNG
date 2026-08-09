@@ -1,0 +1,19 @@
+name: MobileTina HQ artwork
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+      - name: Replace artwork from repository payloads
+        run: |
+          echo 'This workflow is intentionally left for one-shot patch orchestration.'
