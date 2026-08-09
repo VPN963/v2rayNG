@@ -30,6 +30,7 @@ import com.v2ray.ang.R
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.core.MobileTinaAutomation
 import com.v2ray.ang.core.MobileTinaRealDelayCoordinator
+import com.v2ray.ang.dto.entities.ServersCache
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.extension.toast
@@ -56,7 +57,6 @@ import com.v2ray.ang.ui.server.ServerVlessActivity
 import com.v2ray.ang.ui.server.ServerVmessActivity
 import com.v2ray.ang.ui.server.ServerWireguardActivity
 import com.v2ray.ang.ui.settings.SettingsActivity
-import com.v2ray.ang.ui.subscription.SubSettingActivity
 import com.v2ray.ang.ui.userasset.UserAssetActivity
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
@@ -208,75 +208,82 @@ class MainActivity : HelperBaseComponentActivity() {
     override fun ScreenContent() {
         var showAutomation by remember { mutableStateOf(false) }
         var showResetConfirm by remember { mutableStateOf(false) }
+        var showStoreAbout by remember { mutableStateOf(false) }
 
-        BackHandler { moveTaskToBack(false) }
-        MainScreen(
-            mainViewModel = mainViewModel,
-            smartConnecting = smartConnecting,
-            smartCountdownSeconds = smartCountdownSeconds,
-            smartConnectionFailed = smartConnectionFailed,
-            onSmartConnect = { smartConnectAndStart() },
-            onAction = { action ->
-                when (action) {
-                    MainAction.ToggleService -> handleManualConnectAction()
-                    MainAction.TestCurrentServer -> handleLayoutTestClick()
-                    MainAction.ImportQRcode -> importQRcode()
-                    MainAction.ImportClipboard -> importClipboard()
-                    MainAction.ImportConfigLocal -> importConfigLocal()
-                    is MainAction.ImportManually -> importManually(action.type)
-                    MainAction.RestartService -> restartV2Ray()
-                    MainAction.LocateSelectedServer -> mainViewModel.triggerLocateSelectedServer()
-                    is MainAction.SelectServer -> setSelectServer(action.guid)
-                    else -> mainViewModel.onAction(action)
-                }
-            },
-            onNavigate = { route ->
-                when (route) {
-                    MainDestination.MobileTinaAutomation -> showAutomation = true
-                    MainDestination.ResetVpn -> showResetConfirm = true
-                    else -> navigateTo(route)
-                }
-            },
-        )
-
-        if (showAutomation) {
-            MobileTinaAutomationDialog(onDismiss = { showAutomation = false })
-        }
-
-        if (showResetConfirm) {
-            AlertDialog(
-                onDismissRequest = { showResetConfirm = false },
-                title = { Text(stringResource(R.string.mobiletina_reset_title)) },
-                text = { Text(stringResource(R.string.mobiletina_reset_message)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showResetConfirm = false
-                            MobileTinaResetManager.reset(this@MainActivity)
-                            clearSmartConnectState()
-                            mainViewModel.onAction(MainAction.RefreshGroups)
-                            toast(R.string.mobiletina_reset_done)
-                        }
-                    ) {
-                        Text(stringResource(R.string.mobiletina_reset_confirm))
+        if (showStoreAbout) {
+            BackHandler { showStoreAbout = false }
+            MobileTinaStoreAboutScreen(onBack = { showStoreAbout = false })
+        } else {
+            BackHandler { moveTaskToBack(false) }
+            MainScreen(
+                mainViewModel = mainViewModel,
+                smartConnecting = smartConnecting,
+                smartCountdownSeconds = smartCountdownSeconds,
+                smartConnectionFailed = smartConnectionFailed,
+                onSmartConnect = { smartConnectAndStart() },
+                onAction = { action ->
+                    when (action) {
+                        MainAction.ToggleService -> handleManualConnectAction()
+                        MainAction.TestCurrentServer -> handleLayoutTestClick()
+                        MainAction.ImportQRcode -> importQRcode()
+                        MainAction.ImportClipboard -> importClipboard()
+                        MainAction.ImportConfigLocal -> importConfigLocal()
+                        is MainAction.ImportManually -> importManually(action.type)
+                        MainAction.RestartService -> restartV2Ray()
+                        MainAction.LocateSelectedServer -> mainViewModel.triggerLocateSelectedServer()
+                        is MainAction.SelectServer -> setSelectServer(action.guid)
+                        else -> mainViewModel.onAction(action)
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showResetConfirm = false }) {
-                        Text(stringResource(R.string.mobiletina_close))
+                onNavigate = { route ->
+                    when (route) {
+                        MainDestination.StoreAbout -> showStoreAbout = true
+                        MainDestination.MobileTinaAutomation -> showAutomation = true
+                        MainDestination.ResetVpn -> showResetConfirm = true
+                        else -> navigateTo(route)
                     }
-                }
+                },
             )
+
+            if (showAutomation) {
+                MobileTinaAutomationDialog(onDismiss = { showAutomation = false })
+            }
+
+            if (showResetConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showResetConfirm = false },
+                    title = { Text(stringResource(R.string.mobiletina_reset_title)) },
+                    text = { Text(stringResource(R.string.mobiletina_reset_message)) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showResetConfirm = false
+                                MobileTinaResetManager.reset(this@MainActivity)
+                                clearSmartConnectState()
+                                mainViewModel.onAction(MainAction.RefreshGroups)
+                                toast(R.string.mobiletina_reset_done)
+                            }
+                        ) {
+                            Text(stringResource(R.string.mobiletina_reset_confirm))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showResetConfirm = false }) {
+                            Text(stringResource(R.string.mobiletina_close))
+                        }
+                    }
+                )
+            }
         }
     }
 
     private fun navigateTo(destination: MainDestination) {
         val intent = when (destination) {
-            MainDestination.Subscriptions -> Intent(this, SubSettingActivity::class.java)
             MainDestination.PerAppProxy -> Intent(this, PerAppProxyActivity::class.java)
             MainDestination.Routing -> Intent(this, RoutingSettingActivity::class.java)
             MainDestination.UserAssets -> Intent(this, UserAssetActivity::class.java)
             MainDestination.Settings -> Intent(this, SettingsActivity::class.java)
+            MainDestination.StoreAbout,
             MainDestination.MobileTinaAutomation,
             MainDestination.ResetVpn -> return
             MainDestination.Logcat -> Intent(this, LogcatActivity::class.java)
@@ -312,34 +319,41 @@ class MainActivity : HelperBaseComponentActivity() {
             LauncherManager.stopService(this)
             return
         }
-        if (state.isTesting || smartConnecting) return
-
-        val groupId = state.selectedGroupId
-        val initialServers = mainViewModel.serversForGroup(groupId).value
-        if (initialServers.isEmpty()) {
-            markSmartConnectFailed()
-            toast(R.string.title_file_chooser)
-            return
-        }
+        if (smartConnecting) return
 
         smartConnectionFailed = false
         smartConnecting = true
-
-        if (initialServers.size == 1) {
-            smartCountdownSeconds = 0
-            mainViewModel.updateSelectedGuid(initialServers.first().guid)
-            lifecycleScope.launch {
-                delay(120L)
-                requestVpnPermissionAndStart(isSmartConnect = true)
-            }
-            return
-        }
-
-        val startGeneration = MobileTinaRealDelayCoordinator.generation
-        smartCountdownSeconds = SMART_CONNECT_TIMEOUT_SECONDS
-        mainViewModel.testAllRealPing()
+        smartCountdownSeconds = 0
 
         lifecycleScope.launch {
+            // A stale/manual ping job must never consume the user's first Smart Connect tap.
+            // testAllRealPing() cancels old jobs too, but clearing the UI state first makes this path deterministic.
+            if (mainViewModel.uiState.value.isTesting) {
+                mainViewModel.cancelAllPing()
+                delay(50L)
+            }
+
+            // During first resume the subscription refresh and group loading can still be in flight.
+            // Wait briefly for the selected group's servers instead of failing the first tap on an empty UI cache.
+            val readyGroup = awaitSmartConnectServers()
+            if (readyGroup == null) {
+                markSmartConnectFailed()
+                toast(R.string.title_file_chooser)
+                return@launch
+            }
+
+            val initialServers = readyGroup.second
+            if (initialServers.size == 1) {
+                mainViewModel.updateSelectedGuid(initialServers.first().guid)
+                delay(120L)
+                requestVpnPermissionAndStart(isSmartConnect = true)
+                return@launch
+            }
+
+            val startGeneration = MobileTinaRealDelayCoordinator.generation
+            smartCountdownSeconds = SMART_CONNECT_TIMEOUT_SECONDS
+            mainViewModel.testAllRealPing()
+
             val deadline = SystemClock.elapsedRealtime() + SMART_CONNECT_TIMEOUT_MS
             val countdownJob = launch {
                 while (isActive) {
@@ -382,6 +396,22 @@ class MainActivity : HelperBaseComponentActivity() {
             delay(150L)
             requestVpnPermissionAndStart(isSmartConnect = true)
         }
+    }
+
+    private suspend fun awaitSmartConnectServers(): Pair<String, List<ServersCache>>? {
+        val deadline = SystemClock.elapsedRealtime() + SMART_SERVER_READY_TIMEOUT_MS
+        do {
+            val groupId = mainViewModel.uiState.value.selectedGroupId
+            if (groupId.isNotBlank()) {
+                val servers = mainViewModel.serversForGroup(groupId).value
+                if (servers.isNotEmpty()) return groupId to servers
+            }
+            delay(50L)
+        } while (SystemClock.elapsedRealtime() < deadline)
+
+        val groupId = mainViewModel.uiState.value.selectedGroupId
+        val servers = mainViewModel.serversForGroup(groupId).value
+        return if (servers.isNotEmpty()) groupId to servers else null
     }
 
     private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {
@@ -528,6 +558,7 @@ class MainActivity : HelperBaseComponentActivity() {
     private companion object {
         const val FIRST_RUN_COMPLETED = "permissions_completed"
         const val SUBSCRIPTION_REFRESH_GUARD_MS = 5_000L
+        const val SMART_SERVER_READY_TIMEOUT_MS = 2_500L
         const val SMART_CONNECT_TIMEOUT_SECONDS = 6
         const val SMART_CONNECT_TIMEOUT_MS = 6_000L
         const val SMART_START_RESULT_TIMEOUT_MS = 10_000L
