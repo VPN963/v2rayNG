@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -79,10 +79,62 @@ jobs:
           path: /tmp/ghajar-gradle.log
           if-no-files-found: ignore
 
-      - name: Upload Ghajar APK
+      - name: Upload Ghajar APK artifact
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: GhajarVPN-debug-apk
           path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/fdroid/debug/*.apk
           if-no-files-found: error
+
+      - name: Prepare direct-download release files
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          shopt -s nullglob
+          apks=("${{ github.workspace }}/V2rayNG/app/build/outputs/apk/fdroid/debug/"*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "No APK files found"
+            exit 1
+          fi
+
+          for apk in "${apks[@]}"; do
+            base=$(basename "$apk")
+            arch="${base##*-fdroid_}"
+            cp "$apk" "release-assets/GhajarVPN-${arch}"
+          done
+
+          sha256sum release-assets/*.apk > release-assets/SHA256SUMS.txt
+          cat > release-assets/INSTALL.txt <<'EOF'
+          Ghajar VPN installation guide
+
+          Recommended for most recent Android phones:
+          - GhajarVPN-arm64-v8a.apk
+
+          For older/32-bit ARM Android phones:
+          - GhajarVPN-armeabi-v7a.apk
+
+          If you are not sure which architecture your phone uses:
+          - GhajarVPN-universal.apk
+
+          If Android says the app conflicts with an existing package, uninstall the old v2rayNG/Ghajar VPN build first, then install this build.
+          EOF
+
+          echo "Release files:"
+          ls -lh release-assets
+
+      - name: Publish APKs directly to GitHub Releases
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="ghajar-build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Ghajar VPN Build ${GITHUB_RUN_NUMBER}" \
+            --notes "Direct APK downloads for Ghajar VPN. For most Android phones use GhajarVPN-arm64-v8a.apk; if that does not install, use GhajarVPN-universal.apk or GhajarVPN-armeabi-v7a.apk. Source code ZIP/TAR is automatically attached by GitHub."
