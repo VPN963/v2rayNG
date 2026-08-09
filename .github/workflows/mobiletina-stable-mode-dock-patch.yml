@@ -1,0 +1,37 @@
+name: MobileTina stable mode and dock patch
+
+on:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-stable-mode-dock-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+
+      - name: Apply stable UI patch
+        run: python3 .github/scripts/mobiletina_stable_mode_dock.py
+
+      - name: Validate and commit
+        run: |
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add V2rayNG/app/src/main
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Stabilize mode selector and manual dock"
+          git push origin HEAD:agent/mobiletina-2.0.15-base
