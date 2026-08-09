@@ -1,10 +1,10 @@
 package com.v2ray.ang.handler
 
+import android.util.Log
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.dto.SubscriptionItem
 import com.v2ray.ang.util.HttpUtil
-import android.util.Log
 
 object MobileTinaSubscriptionInfo {
 
@@ -21,8 +21,9 @@ object MobileTinaSubscriptionInfo {
     }
 
     private fun refreshOne(guid: String, item: SubscriptionItem) {
-        val raw = fetchHeader(item, SettingsManager.getHttpPort())
-            ?: if (SettingsManager.getHttpPort() != 0) fetchHeader(item, 0) else null
+        val proxyPort = SettingsManager.getHttpPort()
+        val raw: String = fetchHeader(item, proxyPort)
+            ?: (if (proxyPort != 0) fetchHeader(item, 0) else null)
             ?: return
 
         item.trafficUploadBytes = null
