@@ -144,8 +144,8 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         binding.btnModeManual.setOnClickListener { setMode(MODE_MANUAL) }
         binding.btnModeAuto.setOnClickListener { setMode(MODE_AUTO) }
         binding.modeContainer.setOnModeSwipeListener { direction ->
-            // User preference: swipe LEFT -> RIGHT to go from Auto to Manual.
-            if (direction < 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
+            // +1 = left-to-right -> Manual, -1 = right-to-left -> Auto.
+            if (direction > 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
         }
         setMode(MODE_AUTO)
     }
