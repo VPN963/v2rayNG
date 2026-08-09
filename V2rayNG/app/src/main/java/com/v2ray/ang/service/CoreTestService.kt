@@ -1,44 +1,29 @@
 package com.v2ray.ang.service
 
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
-import androidx.core.app.NotificationCompat
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.TestServiceMessage
-import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.MessageHelper
-import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import java.util.Collections
 
+/**
+ * Real-delay test service.
+ *
+ * Intentionally follows the v2rayNG 2.0.15 service model: this is a normal started Service,
+ * not a foreground service, so running a manual/Smart-Connect latency test does not create
+ * a persistent test notification.
+ */
 class CoreTestService : Service() {
 
     private val activeWorkers = Collections.synchronizedList(mutableListOf<RealPingWorkerService>())
-    private val cancelAction by lazy {
-        val intent = Intent(this, CoreTestService::class.java).putExtra(
-            "content",
-            TestServiceMessage(AppConfig.MSG_MEASURE_CONFIG_CANCEL)
-        )
-        val pendingIntent = PendingIntent.getService(
-            this,
-            NotificationChannelType.CORE_TEST.notificationId,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        NotificationCompat.Action.Builder(
-            R.drawable.ic_stop_24dp,
-            getString(android.R.string.cancel),
-            pendingIntent
-        ).build()
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -55,22 +40,12 @@ class CoreTestService : Service() {
         val snapshot = ArrayList(activeWorkers)
         snapshot.forEach { it.cancel() }
         activeWorkers.clear()
-        NotificationHelper.stopForeground(this)
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        NotificationHelper.startForeground(
-            this,
-            NotificationChannelType.CORE_TEST,
-            getString(R.string.app_name),
-            getString(R.string.title_real_ping_all_server),
-            cancelAction
-        )
-
         val message = intent?.serializable<TestServiceMessage>("content")
         if (message == null) {
-            NotificationHelper.stopForeground(this)
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -78,10 +53,7 @@ class CoreTestService : Service() {
         when (message.key) {
             AppConfig.MSG_MEASURE_CONFIG_START -> handleMeasureStart(message, startId)
             AppConfig.MSG_MEASURE_CONFIG_CANCEL -> handleMeasureCancel()
-            else -> {
-                NotificationHelper.stopForeground(this)
-                stopSelf(startId)
-            }
+            else -> stopSelf(startId)
         }
         return START_NOT_STICKY
     }
@@ -111,7 +83,6 @@ class CoreTestService : Service() {
             activeWorkers.add(worker)
             worker.start()
         } else {
-            NotificationHelper.stopForeground(this)
             stopSelf(startId)
         }
     }
@@ -123,12 +94,6 @@ class CoreTestService : Service() {
     ) {
         when (event) {
             is RealPingEvent.Progress -> {
-                NotificationHelper.updateNotification(
-                    channelType = NotificationChannelType.CORE_TEST,
-                    context = this,
-                    title = getString(R.string.app_name),
-                    content = getString(R.string.connection_running_task_left, event.text)
-                )
                 MessageHelper.sendMsg2UI(
                     this,
                     AppConfig.MSG_MEASURE_CONFIG_NOTIFY,
@@ -171,7 +136,6 @@ class CoreTestService : Service() {
                 )
                 onWorkerDone()
                 if (activeWorkers.isEmpty()) {
-                    NotificationHelper.stopForeground(this)
                     stopSelf()
                 }
             }
@@ -187,7 +151,6 @@ class CoreTestService : Service() {
         )
         snapshot.forEach { it.cancel() }
         activeWorkers.clear()
-        NotificationHelper.stopForeground(this)
         stopSelf()
     }
 }
