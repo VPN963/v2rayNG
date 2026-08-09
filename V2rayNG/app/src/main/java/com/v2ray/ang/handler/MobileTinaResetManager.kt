@@ -4,7 +4,8 @@ import android.content.Context
 import com.v2ray.ang.AppConfig
 
 object MobileTinaResetManager {
-    fun reset(context: Context) {
+    fun reset(context: Context, cancelPendingExpiry: Boolean = true) {
+        if (cancelPendingExpiry) MobileTinaExpiryManager.cancel(context)
         V2RayServiceManager.stopVService(context)
         MmkvManager.decodeSubscriptions().map { it.guid }.forEach(MmkvManager::removeSubscription)
         MmkvManager.removeServerViaSubid(AppConfig.DEFAULT_SUBSCRIPTION_ID)
