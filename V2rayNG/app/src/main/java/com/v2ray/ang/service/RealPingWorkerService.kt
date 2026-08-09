@@ -100,9 +100,14 @@ class RealPingWorkerService(
         ) {
             val url = config.server.orEmpty()
             val port = config.serverPort.orEmpty().toInt()
-            val tcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
-            if (tcpTime <= -1L) {
-                return retFailure
+            val firstTcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
+            if (firstTcpTime <= -1L) {
+                // A single one-second connect attempt can fail transiently on mobile/Wi-Fi networks.
+                // Retry once before declaring the node inactive.
+                val retryTcpTime = SpeedtestManager.socketConnectTime(url, port, 2000)
+                if (retryTcpTime <= -1L) {
+                    return retFailure
+                }
             }
         }
 
@@ -110,7 +115,24 @@ class RealPingWorkerService(
         if (!configResult.status) {
             return retFailure
         }
-        return CoreNativeManager.measureOutboundDelay(configResult.content, SettingsManager.getDelayTestUrl())
+
+        val primaryUrl = SettingsManager.getDelayTestUrl()
+        val primaryDelay = runCatching {
+            CoreNativeManager.measureOutboundDelay(configResult.content, primaryUrl)
+        }.getOrDefault(retFailure)
+        if (primaryDelay >= 0L) {
+            return primaryDelay
+        }
+
+        // Match the single-server delay path's resilience: if the primary endpoint is temporarily
+        // unavailable, retry the same proxy configuration against the built-in secondary endpoint.
+        val secondaryUrl = SettingsManager.getDelayTestUrl(true)
+        if (secondaryUrl == primaryUrl) {
+            return retFailure
+        }
+        return runCatching {
+            CoreNativeManager.measureOutboundDelay(configResult.content, secondaryUrl)
+        }.getOrDefault(retFailure)
     }
 
     private fun startTcping(guid: String): Long {
@@ -126,9 +148,11 @@ class RealPingWorkerService(
         ) {
             val url = config.server.orEmpty()
             val port = config.serverPort.orEmpty().toInt()
-            val tcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
-
-            return tcpTime
+            val firstTcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
+            if (firstTcpTime > -1L) {
+                return firstTcpTime
+            }
+            return SpeedtestManager.socketConnectTime(url, port, 2000)
         }
 
         return retFailure
