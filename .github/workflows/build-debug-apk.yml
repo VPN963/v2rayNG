@@ -77,45 +77,33 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('V2rayNG/app/src/main/java/com/v2ray/ang/core/CoreOutboundBuilder.kt')
           text = path.read_text(encoding='utf-8')
 
-          old = '''    private fun createTcpHttpRequest(
+          pattern = re.compile(
+              r'    private fun createTcpHttpRequest\(\n.*?\n    \}\n\n(?=    /\*\*\n     \* Configures transport settings)',
+              re.S,
+          )
+          replacement = '''    private fun createTcpHttpRequest(
               host: String?,
               path: String?
           ): OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean {
-              val requestString =
-                  """{\"version\":\"1.1\",\"method\":\"GET\",\"headers\":{\"User-Agent\":[\"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36\"],\"Accept-Encoding\":[\"gzip, deflate\"],\"Connection\":[\"keep-alive\"],\"Pragma\":[\"no-cache\"]}}"""
-              val request = JsonUtil.fromJson(
-                  requestString,
-                  OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean::class.java
-              ) ?: OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean()
-
-              val parsedHost = host.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
-              request.headers.Host = parsedHost.ifEmpty { null }
-              request.path = path.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("/") }
-              return request
-          }
-          '''
-
-          new = '''    private fun createTcpHttpRequest(
-              host: String?,
-              path: String?
-          ): OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean {
-              // Compatibility with v2rayNG 2.0.15: do not synthesize a full HTTP
-              // request. Preserve only the Host/path values supplied by the URI.
+              // v2rayNG 2.0.15 compatibility: preserve only URI-provided Host/path.
               val request = OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean()
               request.headers.Host = host.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
               request.path = path.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
               return request
           }
+
           '''
 
-          if old not in text:
-              raise SystemExit('Expected createTcpHttpRequest block not found; refusing an unsafe patch')
+          patched, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one createTcpHttpRequest block, found {count}; refusing unsafe patch')
 
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          path.write_text(patched, encoding='utf-8')
           print('Applied legacy TCP/HTTP request generation compatibility patch')
           PY
 
