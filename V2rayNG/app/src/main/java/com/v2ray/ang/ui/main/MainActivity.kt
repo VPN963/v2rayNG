@@ -51,8 +51,17 @@ import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : HelperBaseComponentActivity() {
+
+    companion object {
+        /**
+         * Happ-like behavior: refresh every subscription once for each real app process launch.
+         * Activity recreation (rotation/theme change) must not start another network refresh.
+         */
+        private val launchSubscriptionRefreshStarted = AtomicBoolean(false)
+    }
 
     private val mainViewModel: MainViewModel by viewModels {
         MainViewModel.Factory(application, MainRepository(application as AngApplication))
@@ -94,7 +103,29 @@ class MainActivity : HelperBaseComponentActivity() {
         super.onCreate(savedInstanceState)
         mainViewModel.onAction(MainAction.Initialize)
 
+        // Refresh all subscription URLs in the background as soon as the user opens the app.
+        // The UI is never blocked; when fresh configs arrive the server/group UI is reloaded.
+        refreshSubscriptionsOnLaunch()
+
         checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {}
+    }
+
+    private fun refreshSubscriptionsOnLaunch() {
+        if (!launchSubscriptionRefreshStarted.compareAndSet(false, true)) return
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val result = AngConfigManager.updateConfigViaSubAll()
+                withContext(Dispatchers.Main) {
+                    if (result.successCount > 0 || result.configCount > 0) {
+                        mainViewModel.onAction(MainAction.RefreshGroups)
+                    }
+                }
+            } catch (error: Exception) {
+                // Launch must stay fast and usable even when a subscription server is offline.
+                LogUtil.e(AppConfig.TAG, "Automatic launch subscription refresh failed", error)
+            }
+        }
     }
 
     @Composable
