@@ -19,11 +19,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 object CoreNativeManager {
     private val initialized = AtomicBoolean(false)
 
+    data class NativeDelayResult(
+        val delayMillis: Long,
+        val errorMessage: String? = null
+    )
+
     /**
      * Initialize V2Ray core environment.
      * This method is thread-safe and ensures initialization happens only once.
      * Subsequent calls will be ignored silently.
-     *
      */
     fun initCoreEnv(context: Context?) {
         if (initialized.compareAndSet(false, true)) {
@@ -52,12 +56,7 @@ object CoreNativeManager {
         }
     }
 
-
-    /**
-     * Get V2Ray core version.
-     *
-     * @return Version string of the V2Ray core
-     */
+    /** Get V2Ray core version. */
     fun getLibVersion(): String {
         return try {
             Libv2ray.checkVersionX()
@@ -68,27 +67,30 @@ object CoreNativeManager {
     }
 
     /**
-     * Measure outbound connection delay.
-     *
-     * @param config The configuration JSON string
-     * @param testUrl The URL to test against
-     * @return Delay in milliseconds, or -1 if test failed
+     * Diagnostic version of outbound-delay measurement. Unlike the legacy wrapper, this preserves
+     * the exception text emitted by the Go/Xray layer so callers can distinguish config/TLS/startup
+     * failures from a real network timeout.
      */
-    fun measureOutboundDelay(config: String, testUrl: String): Long {
+    fun measureOutboundDelayDetailed(config: String, testUrl: String): NativeDelayResult {
         return try {
-            Libv2ray.measureOutboundDelay(config, testUrl)
+            val delay = Libv2ray.measureOutboundDelay(config, testUrl)
+            NativeDelayResult(
+                delayMillis = delay,
+                errorMessage = if (delay < 0L) "Libv2ray returned $delay without throwing an exception" else null
+            )
         } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to measure outbound delay", e)
-            -1L
+            val message = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+            LogUtil.e(AppConfig.TAG, "Failed to measure outbound delay: $message", e)
+            NativeDelayResult(-1L, message)
         }
     }
 
-    /**
-     * Create a new core controller instance.
-     *
-     * @param handler The callback handler for core events
-     * @return A new CoreController instance
-     */
+    /** Measure outbound connection delay, preserving the legacy Long-only API. */
+    fun measureOutboundDelay(config: String, testUrl: String): Long {
+        return measureOutboundDelayDetailed(config, testUrl).delayMillis
+    }
+
+    /** Create a new core controller instance. */
     fun newCoreController(handler: CoreCallbackHandler): CoreController {
         return try {
             Libv2ray.newCoreController(handler)
