@@ -6,6 +6,10 @@ on:
     branches:
       - agent/mobiletina-2.0.15-base
 
+concurrency:
+  group: mobiletina-2015-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-debug:
     runs-on: ubuntu-latest
