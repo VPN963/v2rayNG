@@ -58,9 +58,6 @@ jobs:
       - name: Copy libhevtun
         run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-      # Keep the current AndroidLibXrayLite wrapper/API surface used by MobileTina,
-      # but pin only its xray-core dependency to the exact revision used by v2rayNG 2.0.15.
-      # This isolates the Real Delay engine regression without downgrading the Android wrapper.
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
@@ -68,13 +65,20 @@ jobs:
           cache: true
           cache-dependency-path: AndroidLibXrayLite/go.sum
 
-      - name: Build current AndroidLib wrapper with 2.0.15 Xray core
+      # Keep the CURRENT AndroidLibXrayLite source/API surface, but replace only its Go
+      # dependency manifest with the exact manifest from v2rayNG 2.0.15's submodule commit.
+      # This avoids mixing old xray-core with newer quic-go/utls/reality dependencies.
+      - name: Build current AndroidLib wrapper with exact 2.0.15 dependency graph
         run: |
           cd ${{ github.workspace }}/AndroidLibXrayLite
-          go mod edit -require=github.com/xtls/xray-core@v1.260123.1-0.20260206094241-12ee51e4bb1d
+          git fetch --no-tags origin c0a0231614a5c2f439a0324ccfed04a72e7cf22d
+          git show c0a0231614a5c2f439a0324ccfed04a72e7cf22d:go.mod > go.mod
+          git show c0a0231614a5c2f439a0324ccfed04a72e7cf22d:go.sum > go.sum
+          echo "Pinned dependency versions:"
+          go list -m github.com/xtls/xray-core github.com/apernet/quic-go github.com/refraction-networking/utls github.com/xtls/reality
           go mod tidy
-          echo "Pinned xray-core:"
-          go list -m github.com/xtls/xray-core
+          echo "Resolved dependency versions after tidy:"
+          go list -m github.com/xtls/xray-core github.com/apernet/quic-go github.com/refraction-networking/utls github.com/xtls/reality
           go install golang.org/x/mobile/cmd/gomobile@latest
           export PATH="$PATH:$HOME/go/bin"
           mkdir -p assets data
