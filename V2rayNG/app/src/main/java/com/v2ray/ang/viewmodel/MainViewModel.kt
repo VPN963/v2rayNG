@@ -205,11 +205,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         reloadServerList()
     }
 
-    /** MobileTina exposes only real subscriptions; the synthetic All/default group stays hidden. */
+    /** MobileTina exposes only real subscriptions; the synthetic default group stays hidden. */
     fun getSubscriptions(context: Context): List<GroupMapItem> {
         val subscriptions = MmkvManager.decodeSubscriptions()
+            .filter { it.guid != AppConfig.DEFAULT_SUBSCRIPTION_ID }
         val validIds = subscriptions.map { it.guid }
-        if (subscriptionId.isBlank() || !validIds.contains(subscriptionId)) {
+        if (subscriptionId.isBlank() || subscriptionId == AppConfig.DEFAULT_SUBSCRIPTION_ID || !validIds.contains(subscriptionId)) {
             subscriptionId = subscriptions.firstOrNull()?.guid.orEmpty()
             MmkvManager.encodeSettings(AppConfig.CACHE_SUBSCRIPTION_ID, subscriptionId)
         }
