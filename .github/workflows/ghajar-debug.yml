@@ -59,13 +59,28 @@ jobs:
           java-version: '21'
 
       - name: Build F-Droid debug APK
+        shell: bash
         run: |
           cd ${{ github.workspace }}/V2rayNG
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
           chmod 755 gradlew
-          ./gradlew assembleFdroidDebug --stacktrace
+          set +e
+          ./gradlew assembleFdroidDebug --stacktrace --console=plain 2>&1 | tee /tmp/ghajar-gradle.log
+          status=${PIPESTATUS[0]}
+          echo "---- Ghajar Gradle diagnostic ----"
+          grep -E -A5 -B5 '(^e: |FAILURE:|What went wrong:|Execution failed|Unresolved reference|error:|AAPT:|Android resource linking failed|Compilation error|Duplicate resources)' /tmp/ghajar-gradle.log | tail -n 240 || true
+          exit $status
+
+      - name: Upload build diagnostic
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ghajar-build-diagnostic
+          path: /tmp/ghajar-gradle.log
+          if-no-files-found: ignore
 
       - name: Upload Ghajar APK
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: GhajarVPN-debug-apk
