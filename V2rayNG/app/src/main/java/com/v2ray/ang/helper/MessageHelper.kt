@@ -23,28 +23,17 @@ object MessageHelper {
         sendMsg(ctx, AppConfig.BROADCAST_ACTION_ACTIVITY, what, content)
     }
 
+    /**
+     * Real-delay tests intentionally use the same normal started-service model as v2rayNG 2.0.15.
+     * Manual and Smart-Connect tests are initiated while the app is foreground, so they do not
+     * need a foreground-service notification.
+     */
     fun sendMsg2TestService(ctx: Context, message: TestServiceMessage) {
         try {
             val intent = Intent()
             intent.component = ComponentName(ctx, CoreTestService::class.java)
             intent.putExtra("content", message)
-            when (message.key) {
-                AppConfig.MSG_MEASURE_CONFIG_START -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        ContextCompat.startForegroundService(ctx, intent)
-                    } else {
-                        ctx.startService(intent)
-                    }
-                }
-
-                AppConfig.MSG_MEASURE_CONFIG_CANCEL -> {
-                    ctx.stopService(intent)
-                }
-
-                else -> {
-                    ctx.startService(intent)
-                }
-            }
+            ctx.startService(intent)
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to send message to test service", e)
         }
