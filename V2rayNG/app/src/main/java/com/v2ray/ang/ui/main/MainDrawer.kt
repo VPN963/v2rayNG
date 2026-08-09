@@ -38,6 +38,7 @@ enum class MainDestination(@DrawableRes val iconRes: Int, @StringRes val labelRe
     Routing(R.drawable.ic_routing_24dp, R.string.routing_settings_title),
     UserAssets(R.drawable.ic_file_24dp, R.string.title_user_asset_setting),
     Settings(R.drawable.ic_settings_24dp, R.string.title_settings),
+    // Kept as an internal route for source compatibility; MobileTina no longer exposes Automation.
     MobileTinaAutomation(R.drawable.ic_settings_24dp, R.string.mobiletina_automation_title),
     Promotion(R.drawable.ic_promotion_24dp, R.string.title_pref_promotion),
     Logcat(R.drawable.ic_logcat_24dp, R.string.title_logcat),
@@ -52,11 +53,10 @@ private val primaryDrawerItems = listOf(
     MainDestination.PerAppProxy,
     MainDestination.Routing,
     MainDestination.UserAssets,
-    MainDestination.Settings,
-    MainDestination.MobileTinaAutomation
+    MainDestination.Settings
 )
 
-// Backup/restore is intentionally not exposed in MobileTina because public export paths are disabled.
+// Backup/restore and MobileTina Automation are intentionally not exposed in MobileTina.
 private val drawerItems = primaryDrawerItems + listOf(
     MainDestination.Promotion,
     MainDestination.Logcat,

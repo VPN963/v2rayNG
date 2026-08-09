@@ -87,52 +87,21 @@ class RealPingWorkerService(
         }
     }
 
+    /**
+     * Real Delay intentionally follows v2rayNG 2.0.15 semantics: build the speed-test config and
+     * measure the outbound directly. Do not reject a node based on a separate short TCP probe first;
+     * that probe can fail transiently even when the proxy itself is usable.
+     */
     private fun startRealPing(guid: String): Long {
         val retFailure = -1L
-
-        val config = MmkvManager.decodeServerConfig(guid) ?: return retFailure
-        if (!config.configType.isComplexType()
-            && config.configType != EConfigType.HYSTERIA2
-            && config.configType != EConfigType.WIREGUARD
-            && config.alpn?.startsWith("h3") != true
-            && config.server.isNotNullEmpty()
-            && config.serverPort?.toIntOrNull() != null
-        ) {
-            val url = config.server.orEmpty()
-            val port = config.serverPort.orEmpty().toInt()
-            val firstTcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
-            if (firstTcpTime <= -1L) {
-                // A single one-second connect attempt can fail transiently on mobile/Wi-Fi networks.
-                // Retry once before declaring the node inactive.
-                val retryTcpTime = SpeedtestManager.socketConnectTime(url, port, 2000)
-                if (retryTcpTime <= -1L) {
-                    return retFailure
-                }
-            }
-        }
-
         val configResult = CoreConfigManager.getV2rayConfig4Speedtest(context, guid)
         if (!configResult.status) {
             return retFailure
         }
-
-        val primaryUrl = SettingsManager.getDelayTestUrl()
-        val primaryDelay = runCatching {
-            CoreNativeManager.measureOutboundDelay(configResult.content, primaryUrl)
-        }.getOrDefault(retFailure)
-        if (primaryDelay >= 0L) {
-            return primaryDelay
-        }
-
-        // Match the single-server delay path's resilience: if the primary endpoint is temporarily
-        // unavailable, retry the same proxy configuration against the built-in secondary endpoint.
-        val secondaryUrl = SettingsManager.getDelayTestUrl(true)
-        if (secondaryUrl == primaryUrl) {
-            return retFailure
-        }
-        return runCatching {
-            CoreNativeManager.measureOutboundDelay(configResult.content, secondaryUrl)
-        }.getOrDefault(retFailure)
+        return CoreNativeManager.measureOutboundDelay(
+            configResult.content,
+            SettingsManager.getDelayTestUrl()
+        )
     }
 
     private fun startTcping(guid: String): Long {
@@ -148,11 +117,7 @@ class RealPingWorkerService(
         ) {
             val url = config.server.orEmpty()
             val port = config.serverPort.orEmpty().toInt()
-            val firstTcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
-            if (firstTcpTime > -1L) {
-                return firstTcpTime
-            }
-            return SpeedtestManager.socketConnectTime(url, port, 2000)
+            return SpeedtestManager.socketConnectTime(url, port, 1000)
         }
 
         return retFailure
