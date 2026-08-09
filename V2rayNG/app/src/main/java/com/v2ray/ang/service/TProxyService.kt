@@ -32,6 +32,10 @@ class TProxyService(
         init {
             System.loadLibrary("hev-socks5-tunnel")
         }
+
+        /** Forces the JNI class/library to initialize before the first VPN start. */
+        @JvmStatic
+        fun preloadNative() = Unit
     }
 
     /**
@@ -45,8 +49,6 @@ class TProxyService(
             writeText(configContent)
         }
 //        Log.i(AppConfig.TAG, "Config file created: ${configFile.absolutePath}")
-        Log.d(AppConfig.TAG, "HevSocks5Tunnel Config content:\n$configContent")
-
         try {
 //            Log.i(AppConfig.TAG, "TProxyStartService...")
             TProxyStartService(configFile.absolutePath, vpnInterface.fd)

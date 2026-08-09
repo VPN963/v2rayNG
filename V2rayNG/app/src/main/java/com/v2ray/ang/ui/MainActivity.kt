@@ -79,6 +79,9 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
     private var smartCountdownSeconds = 0
     private var lastConnectedPing: String? = null
     private var smartConnectJob: kotlinx.coroutines.Job? = null
+    private var manualConnecting = false
+    private var manualPrewarmGuid: String? = null
+    private var manualPrewarmJob: kotlinx.coroutines.Job? = null
 
     private val requestVpnPermission =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -88,6 +91,9 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
                 startV2Ray(smart)
             } else if (smart) {
                 markSmartConnectFailed()
+            } else {
+                manualConnecting = false
+                refreshSelectedServerUi()
             }
         }
 
@@ -135,37 +141,42 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
     }
 
     private fun setupModeTabs() {
-    binding.modeTabs.removeAllTabs()
-    binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_auto), true)
-    binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_manual), false)
-    binding.modeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-        override fun onTabSelected(tab: TabLayout.Tab) = setMode(tab.position, updateTab = false)
-        override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-        override fun onTabReselected(tab: TabLayout.Tab) = Unit
-    })
-    binding.modeContainer.setOnModeSwipeListener { direction ->
-        if (direction > 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
+        binding.modeTabs.removeAllTabs()
+        binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_auto), true)
+        binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_manual), false)
+        binding.modeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) = setMode(tab.position, updateTab = false)
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
+        binding.modeContainer.setOnModeSwipeListener { direction ->
+            if (direction > 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
+        }
+        setMode(MODE_AUTO)
     }
-    setMode(MODE_AUTO)
-}
 
-private fun createModeTab(textRes: Int): TabLayout.Tab {
-    val label = TextView(this).apply {
-        setText(textRes)
-        gravity = android.view.Gravity.CENTER
-        textAlignment = View.TEXT_ALIGNMENT_CENTER
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
-        textSize = 17f
-        setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorTextPrimary))
-        layoutParams = android.view.ViewGroup.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT
-        )
+    private fun createModeTab(textRes: Int): TabLayout.Tab {
+        val density = resources.displayMetrics.density
+        val label = TextView(this).apply {
+            setText(textRes)
+            gravity = android.view.Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            includeFontPadding = false
+            textSize = 17f
+            // Optical correction for the visible Persian glyph bounds.
+            translationX = -7f * density
+            setPadding(0, 0, 0, 0)
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorTextPrimary))
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        return binding.modeTabs.newTab().setText(textRes).setCustomView(label)
     }
-    return binding.modeTabs.newTab().setText(textRes).setCustomView(label)
-}
 
-private fun setMode(mode: Int, updateTab: Boolean = true) {
+    private fun setMode(mode: Int, updateTab: Boolean = true) {
         currentMode = mode.coerceIn(MODE_AUTO, MODE_MANUAL)
         binding.autoPanel.visibility = if (currentMode == MODE_AUTO) View.VISIBLE else View.GONE
         binding.manualPanel.visibility = if (currentMode == MODE_MANUAL) View.VISIBLE else View.GONE
@@ -227,6 +238,7 @@ private fun setMode(mode: Int, updateTab: Boolean = true) {
         }
         mainViewModel.isRunning.observe(this) { isRunning ->
             if (isRunning == true) {
+                manualConnecting = false
                 smartConnecting = false
                 smartConnectionFailed = false
                 smartCountdownSeconds = 0
@@ -340,10 +352,14 @@ private fun setMode(mode: Int, updateTab: Boolean = true) {
 
     private fun handleManualFabAction() {
         if (mainViewModel.isRunning.value == true) {
+            manualConnecting = false
             V2RayServiceManager.stopVService(this)
             return
         }
-        if (smartConnecting) return
+        if (smartConnecting || manualConnecting) return
+
+        manualConnecting = true
+        refreshSelectedServerUi()
         requestVpnPermissionAndStart(false)
     }
 
@@ -470,7 +486,12 @@ private fun setMode(mode: Int, updateTab: Boolean = true) {
 
     private fun startV2Ray(isSmartConnect: Boolean = false) {
         if (MmkvManager.getSelectServer().isNullOrEmpty()) {
-            if (isSmartConnect) markSmartConnectFailed()
+            if (isSmartConnect) {
+                markSmartConnectFailed()
+            } else {
+                manualConnecting = false
+                refreshSelectedServerUi()
+            }
             toast(R.string.title_file_chooser)
             return
         }
@@ -479,6 +500,14 @@ private fun setMode(mode: Int, updateTab: Boolean = true) {
             lifecycleScope.launch {
                 delay(7_000L)
                 if (smartConnecting && mainViewModel.isRunning.value != true) markSmartConnectFailed()
+            }
+        } else {
+            lifecycleScope.launch {
+                delay(6_000L)
+                if (manualConnecting && mainViewModel.isRunning.value != true) {
+                    manualConnecting = false
+                    refreshSelectedServerUi()
+                }
             }
         }
     }
@@ -508,6 +537,10 @@ private fun setMode(mode: Int, updateTab: Boolean = true) {
         val ping = selectedGuid.takeIf { it.isNotBlank() }
             ?.let { MmkvManager.decodeServerAffiliationInfo(it)?.testDelayMillis } ?: 0L
         val running = mainViewModel.isRunning.value == true
+
+        if (!running && currentMode == MODE_MANUAL && selectedGuid.isNotBlank()) {
+            prewarmManualConnection(selectedGuid)
+        }
 
         binding.tvAutoServer.text = profile?.remarks.orEmpty()
         binding.tvManualSelected.text = profile?.remarks.orEmpty()
@@ -560,9 +593,33 @@ private fun setMode(mode: Int, updateTab: Boolean = true) {
 
         binding.fab.setImageResource(if (running) R.drawable.ic_stop_24dp else R.drawable.ic_play_24dp)
         binding.fab.backgroundTintList = ColorStateList.valueOf(
-            ContextCompat.getColor(this, if (running) R.color.color_fab_active else R.color.color_fab_inactive)
+            when {
+                running -> ContextCompat.getColor(this, R.color.color_fab_active)
+                manualConnecting -> Color.rgb(255, 193, 7)
+                else -> ContextCompat.getColor(this, R.color.color_fab_inactive)
+            }
         )
         refreshSubscriptionCard()
+    }
+
+
+    private fun prewarmManualConnection(guid: String) {
+        if (guid.isBlank() || guid == manualPrewarmGuid) return
+        manualPrewarmGuid = guid
+        manualPrewarmJob?.cancel()
+        manualPrewarmJob = lifecycleScope.launch(Dispatchers.IO) {
+            // Move one-time initialization/config work out of the tap-to-connect critical path.
+            runCatching { V2RayServiceManager.isRunning() }
+            runCatching { com.v2ray.ang.service.TProxyService.preloadNative() }
+            // Warm-up only. The real config is rebuilt again at connect time,
+            // so configuration and settings freshness are preserved.
+            runCatching {
+                com.v2ray.ang.handler.V2rayConfigManager.getV2rayConfig(
+                    applicationContext,
+                    guid
+                )
+            }
+        }
     }
 
     private fun pingLabel(ping: Long): String = when {
