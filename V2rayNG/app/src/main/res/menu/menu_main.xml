@@ -5,7 +5,7 @@
     <!-- Keep the three MobileTina toolbar actions visible: QR, Add and overflow. -->
     <item
         android:id="@+id/import_qrcode"
-        android:icon="@drawable/ic_mobiletina_qr_scan"
+        android:icon="@drawable/ic_scan_24dp"
         android:title="@string/menu_item_import_config_qrcode"
         app:showAsAction="always" />
 
