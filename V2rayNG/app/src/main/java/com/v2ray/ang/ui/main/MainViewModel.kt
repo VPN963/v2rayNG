@@ -76,6 +76,7 @@ class MainViewModel(
     private var preloadJob: Job? = null
     private var selectedGroupLoadJob: Job? = null
     private var reloadJob: Job? = null
+    private var testStartJob: Job? = null
 
     @Volatile
     private var testingGroupId: String? = null
@@ -415,7 +416,10 @@ class MainViewModel(
                             toast(dataSource.getString(R.string.title_update_subscription_result, result.configCount, result.successCount, result.failureCount, result.skipCount))
                     }
                     if (result.configCount > 0) {
-                        setupGroupTab(forceRefresh = true)
+                        // Keep the loading/refresh transaction open until the freshly imported GUIDs
+                        // are actually reflected in the UI cache. A ping batch must never start from
+                        // the old list while SubscriptionUpdater is replacing the MMKV server entries.
+                        setupGroupTab(forceRefresh = true).join()
                         refreshSelectedGuid()
                     }
                 } catch (cancelled: CancellationException) {
@@ -660,6 +664,8 @@ class MainViewModel(
 
     // ---------- Testing ----------
     fun cancelAllPing() {
+        testStartJob?.cancel()
+        testStartJob = null
         dataSource.cancelAllPing()
         testingGroupId = null
         _uiState.update {
@@ -671,31 +677,47 @@ class MainViewModel(
     }
 
     fun testAllRealPing(onlyTcp: Boolean = false) {
-        dataSource.cancelAllPing()
-        val groupId = uiState.value.selectedGroupId
-        val servers = currentServers()
-        dataSource.clearAllTestDelayResults(servers.map { it.guid })
-        if (servers.isEmpty()) {
-            _uiState.update { it.copy(isTesting = false) }
-            return
-        }
-        testingGroupId = groupId
-        _uiState.update {
-            it.copy(
-                isTesting = true,
-                statusText = dataSource.getString(R.string.connection_test_testing)
-            )
-        }
-        viewModelScope.launch(ioDispatcher) {
-            cacheMutex.withLock { groupDataCache.remove(groupId) }
-            dataSource.sendMsg2TestService(
-                TestServiceMessage(
-                    key = AppConfig.MSG_MEASURE_CONFIG_START,
-                    subscriptionId = groupId,
-                    serverGuids = if (keywordFilter.isNotEmpty()) servers.map { it.guid } else emptyList(),
-                    onlyTcp = onlyTcp
+        testStartJob?.cancel()
+        testStartJob = viewModelScope.launch {
+            // MobileTina refreshes subscriptions automatically. Wait until that transaction and its
+            // group reload are fully complete before taking the GUID snapshot used by the test.
+            while (_isLoading.value) {
+                delay(50L)
+            }
+
+            dataSource.cancelAllPing()
+            val groupId = uiState.value.selectedGroupId
+            val servers = currentServers()
+            val serverGuids = servers.map { it.guid }
+            dataSource.clearAllTestDelayResults(serverGuids)
+            if (servers.isEmpty()) {
+                _uiState.update { it.copy(isTesting = false) }
+                testStartJob = null
+                return@launch
+            }
+
+            testingGroupId = groupId
+            _uiState.update {
+                it.copy(
+                    isTesting = true,
+                    statusText = dataSource.getString(R.string.connection_test_testing)
                 )
-            )
+            }
+
+            withContext(ioDispatcher) {
+                cacheMutex.withLock { groupDataCache.remove(groupId) }
+                dataSource.sendMsg2TestService(
+                    TestServiceMessage(
+                        key = AppConfig.MSG_MEASURE_CONFIG_START,
+                        subscriptionId = groupId,
+                        // Always send the exact fresh snapshot. This prevents a concurrent group
+                        // rewrite from making CoreTestService resolve a different set of GUIDs.
+                        serverGuids = serverGuids,
+                        onlyTcp = onlyTcp
+                    )
+                )
+            }
+            testStartJob = null
         }
     }
 
@@ -763,6 +785,7 @@ class MainViewModel(
         selectedGroupLoadJob?.cancel()
         reloadJob?.cancel()
         filterJob?.cancel()
+        testStartJob?.cancel()
         cancelAllPing()
         dataSource.close()
         super.onCleared()
