@@ -1,7 +1,6 @@
 package com.v2ray.ang.service
 
 import android.content.Context
-import android.os.SystemClock
 import com.v2ray.ang.core.CoreConfigManager
 import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.core.DirectSpeedtestConfigManager
@@ -20,6 +19,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import libv2ray.CoreCallbackHandler
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -90,41 +90,62 @@ class RealPingWorkerService(
     }
 
     /**
-     * Use a direct single-node config first, matching the 2.0.15 test path as closely as the
-     * current core allows. Ordinary subscription nodes do not pass through runtime routing,
-     * policy-group, or neighbour-chain analysis before the native delay test.
+     * Measure delay through a fully started temporary CoreController instead of relying only on
+     * Libv2ray.measureOutboundDelay(). The static helper strips most Xray app modules before
+     * starting the temporary instance; that behavior was safe with the older 2.0.15-era core but
+     * can reject newer transports/config shapes immediately on newer Xray builds.
      *
-     * A genuinely unreachable node normally spends time in the native probe. If the native call
-     * returns a failure almost immediately, retry once with the full runtime config. This catches
-     * config-shape false negatives without turning every normal timeout into multiple tests.
+     * A live controller parses and starts the test config through the same core lifecycle used by
+     * a normal connection, then measures delay on the running instance. The historical static
+     * helper remains a final compatibility fallback so nodes that already worked do not regress.
      */
     private fun startRealPing(guid: String): Long {
-        val retFailure = -1L
-        val testUrl = SettingsManager.getDelayTestUrl()
         val directConfig = DirectSpeedtestConfigManager.build(context, guid)
+        val configResult = if (directConfig.status) {
+            directConfig
+        } else {
+            CoreConfigManager.getV2rayConfig4Speedtest(context, guid)
+        }
+        if (!configResult.status) return -1L
 
-        if (!directConfig.status) {
-            val fullConfig = CoreConfigManager.getV2rayConfig(context, guid)
-            if (!fullConfig.status) return retFailure
-            return CoreNativeManager.measureOutboundDelay(fullConfig.content, testUrl)
+        val primaryUrl = SettingsManager.getDelayTestUrl()
+        val secondaryUrl = SettingsManager.getDelayTestUrl(true)
+
+        val controller = CoreNativeManager.newCoreController(TestCoreCallback())
+        try {
+            controller.startLoop(configResult.content, 0)
+            if (controller.isRunning) {
+                val first = tryMeasureController(controller, primaryUrl)
+                if (first > 0L) return first
+
+                val second = tryMeasureController(controller, secondaryUrl)
+                if (second > 0L) return second
+            }
+        } catch (_: Throwable) {
+            // Fall through to the static helper below. The controller path is preferred because
+            // it preserves the complete Xray app graph, but the old helper is kept for compatibility.
+        } finally {
+            try {
+                if (controller.isRunning) {
+                    controller.stopLoop()
+                }
+            } catch (_: Throwable) {
+                // ignore cleanup errors
+            }
         }
 
-        val startedAt = SystemClock.elapsedRealtime()
-        val directResult = CoreNativeManager.measureOutboundDelay(directConfig.content, testUrl)
-        if (directResult > 0L) return directResult
+        val staticPrimary = CoreNativeManager.measureOutboundDelay(configResult.content, primaryUrl)
+        if (staticPrimary > 0L) return staticPrimary
 
-        val elapsed = SystemClock.elapsedRealtime() - startedAt
-        if (elapsed >= QUICK_FAILURE_FALLBACK_MS) {
-            return directResult
+        return CoreNativeManager.measureOutboundDelay(configResult.content, secondaryUrl)
+    }
+
+    private fun tryMeasureController(controller: libv2ray.CoreController, url: String): Long {
+        return try {
+            controller.measureDelay(url)
+        } catch (_: Throwable) {
+            -1L
         }
-
-        val fullConfig = CoreConfigManager.getV2rayConfig(context, guid)
-        if (fullConfig.status && fullConfig.content != directConfig.content) {
-            val fallbackResult = CoreNativeManager.measureOutboundDelay(fullConfig.content, testUrl)
-            if (fallbackResult > 0L) return fallbackResult
-        }
-
-        return directResult
     }
 
     private fun startTcping(guid: String): Long {
@@ -146,7 +167,9 @@ class RealPingWorkerService(
         return retFailure
     }
 
-    companion object {
-        private const val QUICK_FAILURE_FALLBACK_MS = 750L
+    private class TestCoreCallback : CoreCallbackHandler {
+        override fun startup(): Long = 0L
+        override fun shutdown(): Long = 0L
+        override fun onEmitStatus(l: Long, s: String?): Long = 0L
     }
 }
