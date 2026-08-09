@@ -5,9 +5,9 @@
 
     <group android:id="@+id/group_main">
         <item
-            android:id="@+id/sub_setting"
-            android:icon="@drawable/ic_subscriptions_24dp"
-            android:title="@string/title_sub_setting" />
+            android:id="@+id/mobiletina_store_about"
+            android:icon="@drawable/ic_about_24dp"
+            android:title="@string/mobiletina_store_about_title" />
         <item
             android:id="@+id/per_app_proxy_settings"
             android:icon="@drawable/ic_per_apps_24dp"
@@ -40,14 +40,13 @@
             android:icon="@drawable/ic_check_update_24dp"
             android:title="@string/update_check_for_update" />
         <item
-            android:id="@+id/backup_restore"
-            android:icon="@drawable/ic_restore_24dp"
-            android:title="@string/title_configuration_backup_restore" />
-        <item
             android:id="@+id/about"
             android:icon="@drawable/ic_about_24dp"
             android:title="@string/title_about" />
-        <!-- place holder for version text at the bottom -->
+        <item
+            android:id="@+id/mobiletina_reset"
+            android:icon="@drawable/ic_delete_24dp"
+            android:title="@string/mobiletina_delete_vpn" />
         <item
             android:id="@+id/placeholder"
             android:enabled="false"
