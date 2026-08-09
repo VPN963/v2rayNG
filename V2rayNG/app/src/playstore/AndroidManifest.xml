@@ -22,6 +22,14 @@
             android:exported="false" />
 
         <receiver
+            android:name=".receiver.BootReceiver"
+            tools:node="merge">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".receiver.WidgetProvider"
             tools:node="remove" />
     </application>
