@@ -575,14 +575,18 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         binding.fabAuto.imageTintList = ColorStateList.valueOf(autoTint)
         binding.fabAuto.setImageResource(autoIcon)
         binding.tvAutoStatus.text = status
+        val showAutoDetails = running || smartConnecting
+        binding.tvAutoPing.visibility = if (showAutoDetails) View.VISIBLE else View.GONE
+        binding.tvAutoServer.visibility = if (showAutoDetails) View.VISIBLE else View.GONE
+        binding.tvAutoServer.text = if (showAutoDetails) profile?.remarks.orEmpty() else ""
         binding.tvAutoPing.text = when {
             smartConnecting && smartCountdownSeconds > 0 -> smartCountdownSeconds.toString()
             smartConnecting -> getString(R.string.mobiletina_testing)
             running && !lastConnectedPing.isNullOrBlank() -> lastConnectedPing
-            ping > 0L -> ping.toString()
-            ping < 0L -> getString(R.string.mobiletina_ping_inactive)
-            profile != null -> getString(R.string.mobiletina_tap_for_ping)
-            else -> getString(R.string.mobiletina_ping_unknown)
+            running && ping > 0L -> ping.toString()
+            running && ping < 0L -> getString(R.string.mobiletina_ping_inactive)
+            running -> getString(R.string.mobiletina_tap_for_ping)
+            else -> ""
         }
 
         binding.fab.setImageResource(if (running) R.drawable.ic_stop_24dp else R.drawable.ic_play_24dp)

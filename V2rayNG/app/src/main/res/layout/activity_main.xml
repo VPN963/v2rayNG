@@ -26,7 +26,7 @@
                 android:layout_height="3dp"
                 android:indeterminate="true"
                 android:visibility="invisible"
-                app:indicatorColor="#B85B00" />
+                app:indicatorColor="#1976D2" />
 
             <LinearLayout
                 android:id="@+id/mode_switch_container"
@@ -106,8 +106,8 @@
                             android:id="@+id/mode_indicator_manual"
                             android:layout_width="match_parent"
                             android:layout_height="3dp"
-                            android:layout_marginStart="20dp"
-                            android:layout_marginEnd="6dp"
+                            android:layout_marginStart="4dp"
+                            android:layout_marginEnd="4dp"
                             android:background="@android:color/transparent" />
                     </FrameLayout>
 
@@ -119,8 +119,8 @@
                             android:id="@+id/mode_indicator_auto"
                             android:layout_width="match_parent"
                             android:layout_height="3dp"
-                            android:layout_marginStart="6dp"
-                            android:layout_marginEnd="20dp"
+                            android:layout_marginStart="4dp"
+                            android:layout_marginEnd="4dp"
                             android:background="@android:color/transparent" />
                     </FrameLayout>
                 </LinearLayout>
@@ -153,15 +153,15 @@
 
                     <com.google.android.material.floatingactionbutton.FloatingActionButton
                         android:id="@+id/fab_auto"
-                        android:layout_width="156dp"
-                        android:layout_height="156dp"
+                        android:layout_width="172dp"
+                        android:layout_height="172dp"
                         android:clickable="true"
                         android:contentDescription="@string/mobiletina_manual_smart_connect"
                         android:focusable="true"
                         android:src="@drawable/ic_play_24dp"
                         app:backgroundTint="@android:color/white"
-                        app:fabCustomSize="156dp"
-                        app:maxImageSize="58dp"
+                        app:fabCustomSize="172dp"
+                        app:maxImageSize="64dp"
                         app:shapeAppearanceOverlay="@style/MobileTinaCircleFab"
                         app:tint="#202124" />
 
@@ -288,7 +288,7 @@
                     android:id="@+id/tab_group"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:tabIndicatorColor="#FF6D00"
+                    app:tabIndicatorColor="#1976D2"
                     app:tabIndicatorFullWidth="false"
                     app:tabMode="scrollable"
                     app:tabRippleColor="@android:color/transparent"
@@ -308,13 +308,13 @@
 
                 <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="128dp"
+                    android:layout_height="134dp"
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
                     <View
                         android:layout_width="match_parent"
-                        android:layout_height="96dp"
+                        android:layout_height="102dp"
                         android:layout_gravity="bottom"
                         android:background="#2B2B2B" />
 
@@ -333,24 +333,24 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_smart_connect"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="40dp"
                         android:layout_gravity="top|center_horizontal"
-                        android:layout_marginTop="60dp"
-                        android:backgroundTint="#8A4600"
-                        android:minHeight="36dp"
+                        android:layout_marginTop="62dp"
+                        android:backgroundTint="#1976D2"
+                        android:minHeight="40dp"
                         android:paddingStart="18dp"
                         android:paddingEnd="18dp"
                         android:text="@string/mobiletina_manual_smart_connect_with_icon"
                         android:textAllCaps="false"
                         android:textColor="@android:color/white"
-                        app:cornerRadius="19dp" />
+                        app:cornerRadius="20dp" />
 
                     <LinearLayout
                         android:id="@+id/manual_selected_row"
                         android:layout_width="wrap_content"
                         android:layout_height="26dp"
                         android:layout_gravity="top|center_horizontal"
-                        android:layout_marginTop="99dp"
+                        android:layout_marginTop="106dp"
                         android:gravity="center"
                         android:orientation="horizontal"
                         android:visibility="invisible">

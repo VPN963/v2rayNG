@@ -60,7 +60,7 @@ class MainRecyclerAdapter(
         )
 
         holder.itemMainBinding.layoutIndicator.setBackgroundColor(
-            if (guid == MmkvManager.getSelectServer()) Color.rgb(255, 109, 0) else Color.TRANSPARENT
+            if (guid == MmkvManager.getSelectServer()) ContextCompat.getColor(context, R.color.color_fab_active) else Color.TRANSPARENT
         )
         holder.itemMainBinding.infoContainer.setOnClickListener { adapterListener?.onSelectServer(guid) }
     }
