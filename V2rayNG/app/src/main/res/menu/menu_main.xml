@@ -63,6 +63,7 @@
     <item
         android:id="@+id/service_restart"
         android:title="@string/title_service_restart"
+        android:visible="false"
         app:showAsAction="never" />
     <item
         android:id="@+id/real_ping_all"

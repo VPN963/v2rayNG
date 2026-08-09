@@ -78,6 +78,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
     private var smartConnectionFailed = false
     private var smartCountdownSeconds = 0
     private var lastConnectedPing: String? = null
+    private var smartConnectJob: kotlinx.coroutines.Job? = null
 
     private val requestVpnPermission =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -134,21 +135,37 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
     }
 
     private fun setupModeTabs() {
-        binding.modeTabs.removeAllTabs()
-        binding.modeTabs.addTab(binding.modeTabs.newTab().setText(R.string.mobiletina_mode_auto), true)
-        binding.modeTabs.addTab(binding.modeTabs.newTab().setText(R.string.mobiletina_mode_manual), false)
-        binding.modeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) = setMode(tab.position, updateTab = false)
-            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-            override fun onTabReselected(tab: TabLayout.Tab) = Unit
-        })
-        binding.modeContainer.setOnModeSwipeListener { direction ->
-            if (direction > 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
-        }
-        setMode(MODE_AUTO)
+    binding.modeTabs.removeAllTabs()
+    binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_auto), true)
+    binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_manual), false)
+    binding.modeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+        override fun onTabSelected(tab: TabLayout.Tab) = setMode(tab.position, updateTab = false)
+        override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+        override fun onTabReselected(tab: TabLayout.Tab) = Unit
+    })
+    binding.modeContainer.setOnModeSwipeListener { direction ->
+        if (direction > 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
     }
+    setMode(MODE_AUTO)
+}
 
-    private fun setMode(mode: Int, updateTab: Boolean = true) {
+private fun createModeTab(textRes: Int): TabLayout.Tab {
+    val label = TextView(this).apply {
+        setText(textRes)
+        gravity = android.view.Gravity.CENTER
+        textAlignment = View.TEXT_ALIGNMENT_CENTER
+        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        textSize = 17f
+        setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorTextPrimary))
+        layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        )
+    }
+    return binding.modeTabs.newTab().setText(textRes).setCustomView(label)
+}
+
+private fun setMode(mode: Int, updateTab: Boolean = true) {
         currentMode = mode.coerceIn(MODE_AUTO, MODE_MANUAL)
         binding.autoPanel.visibility = if (currentMode == MODE_AUTO) View.VISIBLE else View.GONE
         binding.manualPanel.visibility = if (currentMode == MODE_MANUAL) View.VISIBLE else View.GONE
@@ -336,14 +353,18 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
             clearSmartConnectState()
             return
         }
-        if (smartConnecting) return
+        if (smartConnecting) {
+            cancelSmartConnect()
+            return
+        }
 
         smartConnecting = true
         smartConnectionFailed = false
         smartCountdownSeconds = 0
         refreshSelectedServerUi()
 
-        lifecycleScope.launch {
+        smartConnectJob?.cancel()
+        smartConnectJob = lifecycleScope.launch {
             // Do not consume the six-second Real Delay window while a subscription refresh is still running.
             withTimeoutOrNull(8_000L) {
                 while (subscriptionRefreshing && isActive) delay(50L)
@@ -418,6 +439,20 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
             requestVpnPermissionAndStart(true)
         }
     }
+
+    private fun cancelSmartConnect() {
+    smartConnectJob?.cancel()
+    smartConnectJob = null
+    mainViewModel.cancelRealPing()
+    pendingSmartVpnPermission = false
+    smartConnecting = false
+    smartConnectionFailed = false
+    smartCountdownSeconds = 0
+    // Covers the tiny window where the service start was already dispatched but
+    // the UI has not received the running broadcast yet.
+    V2RayServiceManager.stopVService(this)
+    refreshSelectedServerUi()
+}
 
     private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {
         if (SettingsManager.isVpnMode()) {

@@ -3,27 +3,34 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:showIn="navigation_view">
 
-    <group android:id="@+id/group_main">
+    <group android:id="@+id/group_mobiletina_store">
         <item
             android:id="@+id/mobiletina_store_about"
             android:icon="@drawable/ic_about_24dp"
             android:title="@string/mobiletina_store_about_title" />
+    </group>
+
+    <group android:id="@+id/group_mobiletina_per_app">
         <item
             android:id="@+id/per_app_proxy_settings"
             android:icon="@drawable/ic_per_apps_24dp"
             android:title="@string/per_app_proxy_settings" />
+    </group>
+
+    <group android:id="@+id/group_mobiletina_settings">
         <item
             android:id="@+id/settings"
             android:icon="@drawable/ic_settings_24dp"
             android:title="@string/title_settings" />
+    </group>
+
+    <group android:id="@+id/group_mobiletina_reset">
         <item
             android:id="@+id/mobiletina_reset"
             android:icon="@drawable/ic_delete_24dp"
             android:title="@string/mobiletina_delete_vpn" />
     </group>
 
-    <!-- Legacy destinations stay resource-defined for 2.0.15 binary/source compatibility,
-         but are intentionally unreachable from the MobileTina UI. -->
     <group android:id="@+id/group_mobiletina_hidden" android:visible="false">
         <item android:id="@+id/routing_setting" android:title="@string/routing_settings_title" />
         <item android:id="@+id/user_asset_setting" android:title="@string/title_user_asset_setting" />
