@@ -1,0 +1,20 @@
+name: Inspect MobileTina artwork
+on:
+  push:
+    branches:
+      - agent/mobiletina-hq-stage2
+    paths:
+      - .github/workflows/inspect-artwork.yml
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/mobiletina-2.0.15-base
+      - name: Inspect image files
+        run: |
+          set -euxo pipefail
+          file V2rayNG/app/src/main/res/drawable-nodpi/mt_*
+          identify V2rayNG/app/src/main/res/drawable-nodpi/mt_* || true
+          ls -lh V2rayNG/app/src/main/res/drawable-nodpi/mt_*
