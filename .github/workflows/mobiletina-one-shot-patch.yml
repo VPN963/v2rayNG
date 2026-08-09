@@ -1,0 +1,270 @@
+name: MobileTina one-shot source patch
+
+on:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-one-shot-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+
+      - name: Apply MobileTina source refinements
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              return text.replace(old, new, 1)
+
+          root = Path('V2rayNG/app/src/main')
+
+          # 1) Center the Auto/Manual labels exactly and make Smart Connect cancellable.
+          main_path = root / 'java/com/v2ray/ang/ui/MainActivity.kt'
+          main = main_path.read_text()
+          main = replace_once(
+              main,
+              '    private var lastConnectedPing: String? = null\n',
+              '    private var lastConnectedPing: String? = null\n    private var smartConnectJob: kotlinx.coroutines.Job? = null\n',
+              'smartConnectJob field',
+          )
+
+          mode_pattern = re.compile(
+              r'    private fun setupModeTabs\(\) \{.*?\n    \}\n\n    private fun setMode',
+              re.S,
+          )
+          mode_replacement = '''    private fun setupModeTabs() {
+              binding.modeTabs.removeAllTabs()
+              binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_auto), true)
+              binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_manual), false)
+              binding.modeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+                  override fun onTabSelected(tab: TabLayout.Tab) = setMode(tab.position, updateTab = false)
+                  override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+                  override fun onTabReselected(tab: TabLayout.Tab) = Unit
+              })
+              binding.modeContainer.setOnModeSwipeListener { direction ->
+                  if (direction > 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
+              }
+              setMode(MODE_AUTO)
+          }
+
+          private fun createModeTab(textRes: Int): TabLayout.Tab {
+              val label = TextView(this).apply {
+                  setText(textRes)
+                  gravity = android.view.Gravity.CENTER
+                  textAlignment = View.TEXT_ALIGNMENT_CENTER
+                  layoutDirection = View.LAYOUT_DIRECTION_RTL
+                  textSize = 17f
+                  setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorTextPrimary))
+                  layoutParams = android.view.ViewGroup.LayoutParams(
+                      android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                      android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                  )
+              }
+              return binding.modeTabs.newTab().setText(textRes).setCustomView(label)
+          }
+
+          private fun setMode'''
+          main, n = mode_pattern.subn(mode_replacement, main, count=1)
+          if n != 1:
+              raise SystemExit(f'setupModeTabs: expected one block, found {n}')
+
+          old_smart_start = '''    private fun smartConnectAndStart() {
+              if (mainViewModel.isRunning.value == true) {
+                  V2RayServiceManager.stopVService(this)
+                  clearSmartConnectState()
+                  return
+              }
+              if (smartConnecting) return
+
+              smartConnecting = true
+              smartConnectionFailed = false
+              smartCountdownSeconds = 0
+              refreshSelectedServerUi()
+
+              lifecycleScope.launch {'''
+          new_smart_start = '''    private fun smartConnectAndStart() {
+              if (mainViewModel.isRunning.value == true) {
+                  V2RayServiceManager.stopVService(this)
+                  clearSmartConnectState()
+                  return
+              }
+              if (smartConnecting) {
+                  cancelSmartConnect()
+                  return
+              }
+
+              smartConnecting = true
+              smartConnectionFailed = false
+              smartCountdownSeconds = 0
+              refreshSelectedServerUi()
+
+              smartConnectJob?.cancel()
+              smartConnectJob = lifecycleScope.launch {'''
+          main = replace_once(main, old_smart_start, new_smart_start, 'smart connect start')
+
+          cancel_method = '''
+          private fun cancelSmartConnect() {
+              smartConnectJob?.cancel()
+              smartConnectJob = null
+              mainViewModel.cancelRealPing()
+              pendingSmartVpnPermission = false
+              smartConnecting = false
+              smartConnectionFailed = false
+              smartCountdownSeconds = 0
+              // Covers the tiny window where the service start was already dispatched but
+              // the UI has not received the running broadcast yet.
+              V2RayServiceManager.stopVService(this)
+              refreshSelectedServerUi()
+          }
+
+          '''
+          main = replace_once(
+              main,
+              '    private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {',
+              cancel_method + '    private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {',
+              'cancelSmartConnect insertion',
+          )
+          main_path.write_text(main)
+
+          # 2) Move the Auto dashboard a little lower and remove all implicit tab padding.
+          layout_path = root / 'res/layout/activity_main.xml'
+          layout = layout_path.read_text()
+          layout = replace_once(layout, 'android:paddingTop="52dp"', 'android:paddingTop="72dp"', 'auto panel vertical offset')
+          layout = replace_once(
+              layout,
+              '                app:tabMode="fixed"\n                app:tabRippleColor="@android:color/transparent" />',
+              '                app:tabMode="fixed"\n                app:tabPaddingStart="0dp"\n                app:tabPaddingEnd="0dp"\n                app:tabPaddingTop="0dp"\n                app:tabPaddingBottom="0dp"\n                app:tabRippleColor="@android:color/transparent" />',
+              'mode tab padding',
+          )
+          layout_path.write_text(layout)
+
+          # 3) Hide Service Restart while keeping the ID for 2.0.15 source compatibility.
+          menu_path = root / 'res/menu/menu_main.xml'
+          menu = menu_path.read_text()
+          service_restart_old = '''    <item
+                  android:id="@+id/service_restart"
+                  android:title="@string/title_service_restart"
+                  app:showAsAction="never" />'''
+          service_restart_new = '''    <item
+                  android:id="@+id/service_restart"
+                  android:title="@string/title_service_restart"
+                  android:visible="false"
+                  app:showAsAction="never" />'''
+          menu = replace_once(menu, service_restart_old, service_restart_new, 'service restart visibility')
+          menu_path.write_text(menu)
+
+          # 4) Drawer: one visible item per group so NavigationView renders a separator between each row.
+          drawer_path = root / 'res/menu/menu_drawer.xml'
+          drawer_path.write_text('''<?xml version="1.0" encoding="utf-8"?>
+          <menu xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:tools="http://schemas.android.com/tools"
+              tools:showIn="navigation_view">
+
+              <group android:id="@+id/group_mobiletina_store">
+                  <item
+                      android:id="@+id/mobiletina_store_about"
+                      android:icon="@drawable/ic_about_24dp"
+                      android:title="@string/mobiletina_store_about_title" />
+              </group>
+
+              <group android:id="@+id/group_mobiletina_per_app">
+                  <item
+                      android:id="@+id/per_app_proxy_settings"
+                      android:icon="@drawable/ic_per_apps_24dp"
+                      android:title="@string/per_app_proxy_settings" />
+              </group>
+
+              <group android:id="@+id/group_mobiletina_settings">
+                  <item
+                      android:id="@+id/settings"
+                      android:icon="@drawable/ic_settings_24dp"
+                      android:title="@string/title_settings" />
+              </group>
+
+              <group android:id="@+id/group_mobiletina_reset">
+                  <item
+                      android:id="@+id/mobiletina_reset"
+                      android:icon="@drawable/ic_delete_24dp"
+                      android:title="@string/mobiletina_delete_vpn" />
+              </group>
+
+              <!-- Keep legacy IDs defined for 2.0.15 compile compatibility, but unreachable. -->
+              <group android:id="@+id/group_mobiletina_hidden" android:visible="false">
+                  <item android:id="@+id/routing_setting" android:title="@string/routing_settings_title" />
+                  <item android:id="@+id/user_asset_setting" android:title="@string/title_user_asset_setting" />
+                  <item android:id="@+id/promotion" android:title="@string/title_pref_promotion" />
+                  <item android:id="@+id/logcat" android:title="@string/title_logcat" />
+                  <item android:id="@+id/check_for_update" android:title="@string/update_check_for_update" />
+                  <item android:id="@+id/about" android:title="@string/title_about" />
+              </group>
+          </menu>
+          ''')
+
+          # 5) Start Scanning Immediately defaults to enabled. Stored false still wins if user disables it.
+          pref_path = root / 'res/xml/pref_settings.xml'
+          pref = pref_path.read_text()
+          pref = replace_once(
+              pref,
+              '        <CheckBoxPreference\n            android:key="pref_start_scan_immediate"',
+              '        <CheckBoxPreference\n            android:defaultValue="true"\n            android:key="pref_start_scan_immediate"',
+              'scan preference default',
+          )
+          pref_path.write_text(pref)
+
+          scanner_path = root / 'java/com/v2ray/ang/ui/ScannerActivity.kt'
+          scanner = scanner_path.read_text()
+          scanner = replace_once(
+              scanner,
+              'MmkvManager.decodeSettingsBool(AppConfig.PREF_START_SCAN_IMMEDIATE)',
+              'MmkvManager.decodeSettingsBool(AppConfig.PREF_START_SCAN_IMMEDIATE, true)',
+              'scanner runtime default',
+          )
+          scanner_path.write_text(scanner)
+
+          # 6) Remove only the generic "Start services" toast; keep proxy-sharing warnings.
+          service_path = root / 'java/com/v2ray/ang/handler/V2RayServiceManager.kt'
+          service = service_path.read_text()
+          service = replace_once(
+              service,
+              '''        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
+              context.toast(R.string.toast_warning_pref_proxysharing_short)
+          } else {
+              context.toast(R.string.toast_services_start)
+          }''',
+              '''        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
+              context.toast(R.string.toast_warning_pref_proxysharing_short)
+          }''',
+              'start service toast',
+          )
+          service_path.write_text(service)
+          PY
+
+      - name: Commit source refinements
+        shell: bash
+        run: |
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add V2rayNG/app/src/main
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Refine MobileTina controls and cancellable smart connect"
+          git push origin HEAD:agent/mobiletina-2.0.15-base
