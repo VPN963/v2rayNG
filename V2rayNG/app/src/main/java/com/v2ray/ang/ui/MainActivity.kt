@@ -540,40 +540,30 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         binding.tvManualPing.text = pingLabel(ping)
         binding.manualSelectedRow.visibility = if (profile != null) View.VISIBLE else View.INVISIBLE
 
-        val autoBackground: Int
-        val autoTint: Int
-        val autoIcon: Int
+        val autoArtwork: Int
         val status: String
         when {
             running -> {
-                autoBackground = Color.rgb(25, 118, 210)
-                autoTint = Color.WHITE
-                autoIcon = R.drawable.ic_stop_24dp
+                autoArtwork = R.drawable.mt_auto_blue
                 status = getString(R.string.mobiletina_status_connected)
             }
             smartConnecting -> {
-                autoBackground = Color.rgb(255, 193, 7)
-                autoTint = Color.rgb(61, 48, 0)
-                autoIcon = R.drawable.ic_fab_check
+                autoArtwork = R.drawable.mt_auto_yellow
                 status = getString(R.string.mobiletina_status_connecting)
             }
             smartConnectionFailed -> {
-                autoBackground = Color.rgb(211, 47, 47)
-                autoTint = Color.WHITE
-                autoIcon = R.drawable.ic_fab_check
+                autoArtwork = R.drawable.mt_auto_red
                 status = getString(R.string.mobiletina_status_failed)
             }
             else -> {
-                autoBackground = Color.WHITE
-                autoTint = Color.rgb(32, 33, 36)
-                autoIcon = R.drawable.ic_play_24dp
+                autoArtwork = R.drawable.mt_auto_white
                 status = getString(R.string.mobiletina_status_disconnected)
             }
         }
 
-        binding.fabAuto.backgroundTintList = ColorStateList.valueOf(autoBackground)
-        binding.fabAuto.imageTintList = ColorStateList.valueOf(autoTint)
-        binding.fabAuto.setImageResource(autoIcon)
+        binding.fabAuto.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+        binding.fabAuto.imageTintList = null
+        binding.fabAuto.setImageResource(autoArtwork)
         binding.tvAutoStatus.text = status
         val showAutoDetails = running || smartConnecting
         binding.tvAutoPing.visibility = if (showAutoDetails) View.VISIBLE else View.GONE
@@ -589,13 +579,11 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
             else -> ""
         }
 
-        binding.fab.setImageResource(if (running) R.drawable.ic_stop_24dp else R.drawable.ic_play_24dp)
-        binding.fab.backgroundTintList = ColorStateList.valueOf(
-            when {
-                running -> ContextCompat.getColor(this, R.color.color_fab_active)
-                manualConnecting -> Color.rgb(255, 193, 7)
-                else -> ContextCompat.getColor(this, R.color.color_fab_inactive)
-            }
+        binding.fab.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+        binding.fab.imageTintList = null
+        // User-supplied artwork: VPN off = stop, VPN on = fab.
+        binding.fab.setImageResource(
+            if (running) R.drawable.mt_manual_fab else R.drawable.mt_manual_stop
         )
         refreshSubscriptionCard()
     }

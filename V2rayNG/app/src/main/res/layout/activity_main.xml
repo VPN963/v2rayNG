@@ -158,12 +158,13 @@
                         android:clickable="true"
                         android:contentDescription="@string/mobiletina_manual_smart_connect"
                         android:focusable="true"
-                        android:src="@drawable/ic_play_24dp"
-                        app:backgroundTint="@android:color/white"
+                        android:padding="0dp"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/mt_auto_white"
+                        app:backgroundTint="@android:color/transparent"
                         app:fabCustomSize="172dp"
-                        app:maxImageSize="64dp"
-                        app:shapeAppearanceOverlay="@style/MobileTinaCircleFab"
-                        app:tint="#202124" />
+                        app:maxImageSize="172dp"
+                        app:shapeAppearanceOverlay="@style/MobileTinaCircleFab" />
 
                     <TextView
                         android:id="@+id/tv_auto_status"
@@ -324,11 +325,13 @@
                         android:layout_height="58dp"
                         android:layout_gravity="top|center_horizontal"
                         android:contentDescription="@string/tasker_start_service"
-                        android:src="@drawable/ic_play_24dp"
+                        android:padding="0dp"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/mt_manual_stop"
+                        app:backgroundTint="@android:color/transparent"
                         app:fabCustomSize="58dp"
-                        app:maxImageSize="27dp"
-                        app:shapeAppearanceOverlay="@style/MobileTinaCircleFab"
-                        app:tint="@color/colorWhite" />
+                        app:maxImageSize="58dp"
+                        app:shapeAppearanceOverlay="@style/MobileTinaCircleFab" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_smart_connect"
