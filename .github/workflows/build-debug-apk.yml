@@ -35,7 +35,6 @@ jobs:
             --channel=0 \
             --install "ndk;29.0.14206865"
           echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
 
       - name: Restore cached libhevtun
         id: cache-libhevtun-restore
@@ -58,36 +57,67 @@ jobs:
       - name: Copy libhevtun
         run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: AndroidLibXrayLite/go.mod
-          cache: true
-          cache-dependency-path: AndroidLibXrayLite/go.sum
-
-      # Keep the CURRENT AndroidLibXrayLite source/API surface, but replace only its Go
-      # dependency manifest with the exact manifest from v2rayNG 2.0.15's submodule commit.
-      # This avoids mixing old xray-core with newer quic-go/utls/reality dependencies.
-      - name: Build current AndroidLib wrapper with exact 2.0.15 dependency graph
+      - name: Fetch AndroidLibXrayLite tag
         run: |
-          cd ${{ github.workspace }}/AndroidLibXrayLite
-          git fetch --no-tags origin c0a0231614a5c2f439a0324ccfed04a72e7cf22d
-          git show c0a0231614a5c2f439a0324ccfed04a72e7cf22d:go.mod > go.mod
-          git show c0a0231614a5c2f439a0324ccfed04a72e7cf22d:go.sum > go.sum
-          echo "Pinned dependency versions:"
-          go list -m github.com/xtls/xray-core github.com/apernet/quic-go github.com/refraction-networking/utls github.com/xtls/reality
-          go mod tidy
-          echo "Resolved dependency versions after tidy:"
-          go list -m github.com/xtls/xray-core github.com/apernet/quic-go github.com/refraction-networking/utls github.com/xtls/reality
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          export PATH="$PATH:$HOME/go/bin"
-          mkdir -p assets data
-          bash gen_assets.sh download
-          cp -v data/*.dat assets/
-          gomobile init
-          gomobile bind -v -androidapi 24 -trimpath -ldflags='-s -w -buildid= -checklinkname=0' ./
-          test -f libv2ray.aar
-          cp -f libv2ray.aar ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
+          pushd AndroidLibXrayLite
+          CURRENT_TAG=$(git describe --tags --abbrev=0)
+          echo "Current tag in this repo: $CURRENT_TAG"
+          echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
+          popd
+
+      - name: Download libv2ray
+        uses: robinraju/release-downloader@v1.13
+        with:
+          repository: '2dust/AndroidLibXrayLite'
+          tag: ${{ env.CURRENT_TAG }}
+          fileName: 'libv2ray.aar'
+          out-file-path: V2rayNG/app/libs/
+
+      - name: Apply v2rayNG 2.0.15 TCP HTTP header compatibility
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('V2rayNG/app/src/main/java/com/v2ray/ang/core/CoreOutboundBuilder.kt')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''    private fun createTcpHttpRequest(
+              host: String?,
+              path: String?
+          ): OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean {
+              val requestString =
+                  """{\"version\":\"1.1\",\"method\":\"GET\",\"headers\":{\"User-Agent\":[\"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36\"],\"Accept-Encoding\":[\"gzip, deflate\"],\"Connection\":[\"keep-alive\"],\"Pragma\":[\"no-cache\"]}}"""
+              val request = JsonUtil.fromJson(
+                  requestString,
+                  OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean::class.java
+              ) ?: OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean()
+
+              val parsedHost = host.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+              request.headers.Host = parsedHost.ifEmpty { null }
+              request.path = path.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("/") }
+              return request
+          }
+          '''
+
+          new = '''    private fun createTcpHttpRequest(
+              host: String?,
+              path: String?
+          ): OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean {
+              // Compatibility with v2rayNG 2.0.15: do not synthesize a full HTTP
+              // request. Preserve only the Host/path values supplied by the URI.
+              val request = OutboundBean.StreamSettingsBean.TcpSettingsBean.HeaderBean.RequestBean()
+              request.headers.Host = host.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+              request.path = path.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+              return request
+          }
+          '''
+
+          if old not in text:
+              raise SystemExit('Expected createTcpHttpRequest block not found; refusing an unsafe patch')
+
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          print('Applied legacy TCP/HTTP request generation compatibility patch')
+          PY
 
       - name: Setup Java
         uses: actions/setup-java@v5.7.0
