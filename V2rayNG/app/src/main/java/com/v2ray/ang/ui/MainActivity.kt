@@ -7,11 +7,13 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.net.VpnService
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
@@ -33,7 +35,9 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.core.MobileTinaSessionLimiter
 import com.v2ray.ang.databinding.ActivityMainBinding
+import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.extension.toastError
@@ -46,7 +50,6 @@ import com.v2ray.ang.handler.MobileTinaSubscriptionInfo
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.V2RayServiceManager
-import com.v2ray.ang.core.MobileTinaSessionLimiter
 import com.v2ray.ang.util.MobileTinaImportNormalizer
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
@@ -101,6 +104,8 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             if (SettingsChangeManager.consumeRestartService() && mainViewModel.isRunning.value == true) restartV2Ray()
             if (SettingsChangeManager.consumeSetupGroupTab()) setupGroupTab()
+            setupGroupTab()
+            refreshSelectedServerUi()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -116,6 +121,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         normalizeSubscriptionNames()
         setupGroupTab()
         mainViewModel.reloadServerList()
+        ensureSelectedServerForCurrentSubscription()
         refreshSelectedServerUi()
 
         MobileTinaExpiryManager.recoverPending(this)
@@ -155,7 +161,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
     private fun setupGroupPager() {
         groupPagerAdapter = GroupPagerAdapter(this, emptyList())
         binding.viewPager.adapter = groupPagerAdapter
-        // Horizontal gestures are reserved for Auto/Manual; subscription changes happen by tapping tabs.
+        // Horizontal gestures belong to Auto/Manual; subscription changes happen by tapping tabs.
         binding.viewPager.isUserInputEnabled = false
     }
 
@@ -194,7 +200,10 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
             }
             refreshSelectedServerUi()
         }
-        mainViewModel.updateListAction.observe(this) { refreshSelectedServerUi() }
+        mainViewModel.updateListAction.observe(this) {
+            ensureSelectedServerForCurrentSubscription()
+            refreshSelectedServerUi()
+        }
         mainViewModel.realPingFinishedAction.observe(this) {
             refreshSelectedServerUi()
             refreshSubscriptionCard()
@@ -221,6 +230,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
 
         if (groups.isEmpty()) {
             binding.tabGroup.visibility = View.GONE
+            refreshSelectedServerUi()
             return
         }
         binding.tabGroup.visibility = View.VISIBLE
@@ -232,6 +242,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
                 text = "${group.remarks} ($count)"
                 setPadding(22, 14, 22, 14)
                 maxLines = 1
+                textSize = 16f
                 setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorTextPrimary))
             }
             installSecretHold(textView, group.id)
@@ -240,7 +251,24 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         }.also { it.attach() }
 
         val targetIndex = groups.indexOfFirst { it.id == mainViewModel.subscriptionId }.let { if (it >= 0) it else 0 }
+        val targetGroup = groups[targetIndex]
+        if (mainViewModel.subscriptionId != targetGroup.id) {
+            mainViewModel.subscriptionIdChanged(targetGroup.id)
+        }
         binding.viewPager.setCurrentItem(targetIndex, false)
+        ensureSelectedServerForCurrentSubscription()
+        refreshSubscriptionCard()
+    }
+
+    private fun ensureSelectedServerForCurrentSubscription() {
+        val subId = mainViewModel.subscriptionId
+        if (subId.isBlank()) return
+        val guids = MmkvManager.decodeServerList(subId)
+        if (guids.isEmpty()) return
+        val selected = MmkvManager.getSelectServer()
+        if (selected.isNullOrBlank() || selected !in guids) {
+            MmkvManager.setSelectServer(guids.first())
+        }
     }
 
     private fun installSecretHold(view: View, subscriptionId: String) {
@@ -316,16 +344,19 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         refreshSelectedServerUi()
 
         lifecycleScope.launch {
+            // Do not consume the six-second Real Delay window while a subscription refresh is still running.
             withTimeoutOrNull(8_000L) {
                 while (subscriptionRefreshing && isActive) delay(50L)
             }
 
+            val groups = mainViewModel.getSubscriptions(this@MainActivity)
             if (mainViewModel.subscriptionId.isBlank()) {
-                val first = mainViewModel.getSubscriptions(this@MainActivity).firstOrNull()
+                val first = groups.firstOrNull()
                 if (first != null) mainViewModel.subscriptionIdChanged(first.id)
             } else {
                 mainViewModel.reloadServerList()
             }
+            ensureSelectedServerForCurrentSubscription()
             delay(100L)
 
             val serverGuids = mainViewModel.currentServerGuids()
@@ -357,6 +388,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
                 }
             }
 
+            // IMPORTANT: this is the untouched 2.0.15 Real Delay service.
             mainViewModel.testAllRealPing()
             val finished = withTimeoutOrNull(SMART_CONNECT_TIMEOUT_MS) {
                 while (mainViewModel.realPingGeneration == generation) delay(40L)
@@ -532,7 +564,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
             binding.tvSubscriptionUsage.visibility = View.VISIBLE
         } else {
             binding.subscriptionProgress.visibility = View.GONE
-            binding.tvSubscriptionUsage.visibility = View.GONE
+            binding.tvSubscriptionUsage.visibility = View.INVISIBLE
         }
 
         if (expire > 0L) {
@@ -540,7 +572,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
             binding.tvSubscriptionDays.text = getString(R.string.mobiletina_subscription_days_remaining, days)
             binding.tvSubscriptionDays.visibility = View.VISIBLE
         } else {
-            binding.tvSubscriptionDays.visibility = View.GONE
+            binding.tvSubscriptionDays.visibility = View.INVISIBLE
         }
     }
 
@@ -573,6 +605,8 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
     override fun onResume() {
         super.onResume()
         MobileTinaExpiryManager.recoverPending(this)
+        setupGroupTab()
+        ensureSelectedServerForCurrentSubscription()
         refreshSelectedServerUi()
 
         if (!hasInternetConnection()) {
@@ -599,6 +633,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
                 normalizeSubscriptionNames()
                 setupGroupTab()
                 mainViewModel.reloadServerList()
+                ensureSelectedServerForCurrentSubscription()
                 subscriptionRefreshing = false
                 binding.progressBar.visibility = View.INVISIBLE
                 refreshSelectedServerUi()
@@ -626,6 +661,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
                 normalizeSubscriptionNames()
                 setupGroupTab()
                 mainViewModel.reloadServerList()
+                ensureSelectedServerForCurrentSubscription()
                 subscriptionRefreshing = false
                 binding.progressBar.visibility = View.INVISIBLE
                 refreshSelectedServerUi()
@@ -636,6 +672,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
 
     private fun normalizeSubscriptionNames() {
         MmkvManager.decodeSubscriptions().forEach { cache ->
+            if (cache.guid == AppConfig.DEFAULT_SUBSCRIPTION_ID) return@forEach
             val remarks = cache.subscription.remarks.trim()
             if (remarks.isBlank() || remarks.equals("import sub", ignoreCase = true)) {
                 cache.subscription.remarks = DEFAULT_SUBSCRIPTION_NAME
@@ -685,12 +722,147 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
             importQRcode()
             true
         }
+        R.id.import_clipboard -> {
+            importClipboard()
+            true
+        }
+        R.id.import_local -> {
+            importConfigLocal()
+            true
+        }
+        R.id.import_manually_policy_group -> {
+            importManually(EConfigType.POLICYGROUP.value)
+            true
+        }
+        R.id.import_manually_vmess -> {
+            importManually(EConfigType.VMESS.value)
+            true
+        }
+        R.id.import_manually_vless -> {
+            importManually(EConfigType.VLESS.value)
+            true
+        }
+        R.id.import_manually_ss -> {
+            importManually(EConfigType.SHADOWSOCKS.value)
+            true
+        }
+        R.id.import_manually_socks -> {
+            importManually(EConfigType.SOCKS.value)
+            true
+        }
+        R.id.import_manually_http -> {
+            importManually(EConfigType.HTTP.value)
+            true
+        }
+        R.id.import_manually_trojan -> {
+            importManually(EConfigType.TROJAN.value)
+            true
+        }
+        R.id.import_manually_wireguard -> {
+            importManually(EConfigType.WIREGUARD.value)
+            true
+        }
+        R.id.import_manually_hysteria2 -> {
+            importManually(EConfigType.HYSTERIA2.value)
+            true
+        }
+        R.id.service_restart -> {
+            restartV2Ray()
+            true
+        }
+        R.id.mobiletina_locate_selected -> {
+            locateSelectedServer()
+            true
+        }
+        R.id.ping_all -> {
+            toast(getString(R.string.connection_test_testing_count, mainViewModel.serversCache.count()))
+            mainViewModel.testAllTcping()
+            true
+        }
+        R.id.real_ping_all -> {
+            toast(getString(R.string.connection_test_testing_count, mainViewModel.serversCache.count()))
+            mainViewModel.testAllRealPing()
+            true
+        }
+        R.id.sort_by_test_results -> {
+            sortByTestResults()
+            true
+        }
+        R.id.sub_update -> {
+            importConfigViaSub()
+            true
+        }
+        R.id.del_all_config -> {
+            delAllConfig()
+            true
+        }
+        R.id.del_duplicate_config -> {
+            delDuplicateConfig()
+            true
+        }
+        R.id.del_invalid_config -> {
+            delInvalidConfig()
+            true
+        }
         else -> super.onOptionsItemSelected(item)
+    }
+
+    private fun importManually(createConfigType: Int) {
+        val intent = if (createConfigType == EConfigType.POLICYGROUP.value) {
+            Intent()
+                .putExtra("subscriptionId", mainViewModel.subscriptionId)
+                .setClass(this, ServerGroupActivity::class.java)
+        } else {
+            Intent()
+                .putExtra("createConfigType", createConfigType)
+                .putExtra("subscriptionId", mainViewModel.subscriptionId)
+                .setClass(this, ServerActivity::class.java)
+        }
+        requestActivityLauncher.launch(intent)
     }
 
     private fun importQRcode() {
         launchQRCodeScanner { scanResult ->
             if (!scanResult.isNullOrBlank()) importBatchConfig(scanResult)
+        }
+    }
+
+    private fun importClipboard(): Boolean {
+        return try {
+            importBatchConfig(Utils.getClipboard(this))
+            true
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to import config from clipboard", e)
+            toastError(R.string.toast_failure)
+            false
+        }
+    }
+
+    private fun importConfigLocal(): Boolean {
+        return try {
+            showFileChooser()
+            true
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to import config from local file", e)
+            toastError(R.string.toast_failure)
+            false
+        }
+    }
+
+    private fun showFileChooser() {
+        launchFileChooser { uri ->
+            if (uri != null) readContentFromUri(uri)
+        }
+    }
+
+    private fun readContentFromUri(uri: Uri) {
+        try {
+            contentResolver.openInputStream(uri).use { input ->
+                importBatchConfig(input?.bufferedReader()?.readText())
+            }
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to read config file", e)
+            toastError(R.string.toast_failure)
         }
     }
 
@@ -709,17 +881,112 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
                             toast(getString(R.string.title_import_config_count, count))
                             mainViewModel.reloadServerList()
                         }
-                        countSub > 0 -> setupGroupTab()
+                        countSub > 0 -> {
+                            setupGroupTab()
+                            // A QR subscription should be usable immediately without restarting the app.
+                            if (hasInternetConnection()) refreshSubscriptionsSilently()
+                        }
                         else -> toastError(R.string.toast_failure)
                     }
                     binding.progressBar.visibility = View.INVISIBLE
+                    ensureSelectedServerForCurrentSubscription()
                     refreshSelectedServerUi()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Failed to import batch config", e)
                 withContext(Dispatchers.Main) {
                     toastError(R.string.toast_failure)
                     binding.progressBar.visibility = View.INVISIBLE
                 }
+            }
+        }
+    }
+
+    private fun locateSelectedServer() {
+        if (currentMode != MODE_MANUAL) setMode(MODE_MANUAL)
+        val selected = MmkvManager.getSelectServer().orEmpty()
+        if (selected.isBlank()) {
+            toast(R.string.title_file_chooser)
+            return
+        }
+        val subId = MmkvManager.decodeServerConfig(selected)?.subscriptionId.orEmpty()
+        val groups = mainViewModel.getSubscriptions(this)
+        val index = groups.indexOfFirst { it.id == subId }
+        if (index >= 0) {
+            mainViewModel.subscriptionIdChanged(groups[index].id)
+            binding.viewPager.setCurrentItem(index, false)
+        }
+        binding.viewPager.postDelayed({
+            supportFragmentManager.fragments
+                .filterIsInstance<GroupServerFragment>()
+                .firstOrNull { it.isVisible }
+                ?.scrollToSelectedServer()
+        }, 180L)
+    }
+
+    private fun delAllConfig() {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.del_config_comfirm)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                binding.progressBar.visibility = View.VISIBLE
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val ret = mainViewModel.removeAllServer()
+                    withContext(Dispatchers.Main) {
+                        mainViewModel.reloadServerList()
+                        setupGroupTab()
+                        toast(getString(R.string.title_del_config_count, ret))
+                        binding.progressBar.visibility = View.INVISIBLE
+                        refreshSelectedServerUi()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun delDuplicateConfig() {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.del_config_comfirm)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                binding.progressBar.visibility = View.VISIBLE
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val ret = mainViewModel.removeDuplicateServer()
+                    withContext(Dispatchers.Main) {
+                        mainViewModel.reloadServerList()
+                        toast(getString(R.string.title_del_duplicate_config_count, ret))
+                        binding.progressBar.visibility = View.INVISIBLE
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun delInvalidConfig() {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.del_invalid_config_comfirm)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                binding.progressBar.visibility = View.VISIBLE
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val ret = mainViewModel.removeInvalidServer()
+                    withContext(Dispatchers.Main) {
+                        mainViewModel.reloadServerList()
+                        toast(getString(R.string.title_del_config_count, ret))
+                        binding.progressBar.visibility = View.INVISIBLE
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun sortByTestResults() {
+        binding.progressBar.visibility = View.VISIBLE
+        lifecycleScope.launch(Dispatchers.IO) {
+            mainViewModel.sortByTestResults()
+            withContext(Dispatchers.Main) {
+                mainViewModel.reloadServerList()
+                binding.progressBar.visibility = View.INVISIBLE
             }
         }
     }
