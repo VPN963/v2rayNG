@@ -1,8 +1,10 @@
 package com.v2ray.ang.service
 
 import android.content.Context
+import android.os.SystemClock
 import com.v2ray.ang.core.CoreConfigManager
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.core.DirectSpeedtestConfigManager
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
@@ -50,7 +52,7 @@ class RealPingWorkerService(
                         onEvent(RealPingEvent.Result(guid, result))
                     }
                 } catch (_: Throwable) {
-                    // ignore
+                    // Keep one bad profile from cancelling the rest of the batch.
                 } finally {
                     val count = totalCount.decrementAndGet()
                     val left = runningCount.decrementAndGet()
@@ -68,7 +70,7 @@ class RealPingWorkerService(
                     onEvent(RealPingEvent.Finish("0"))
                 }
             } catch (_: CancellationException) {
-                // If cancelled, don't send finish event to avoid confusion
+                // If cancelled, don't send finish event to avoid confusion.
             } finally {
                 close()
             }
@@ -88,20 +90,41 @@ class RealPingWorkerService(
     }
 
     /**
-     * Real Delay intentionally follows v2rayNG 2.0.15 semantics: build the speed-test config and
-     * measure the outbound directly. Do not reject a node based on a separate short TCP probe first;
-     * that probe can fail transiently even when the proxy itself is usable.
+     * Use a direct single-node config first, matching the 2.0.15 test path as closely as the
+     * current core allows. Ordinary subscription nodes do not pass through runtime routing,
+     * policy-group, or neighbour-chain analysis before the native delay test.
+     *
+     * A genuinely unreachable node normally spends time in the native probe. If the native call
+     * returns a failure almost immediately, retry once with the full runtime config. This catches
+     * config-shape false negatives without turning every normal timeout into multiple tests.
      */
     private fun startRealPing(guid: String): Long {
         val retFailure = -1L
-        val configResult = CoreConfigManager.getV2rayConfig4Speedtest(context, guid)
-        if (!configResult.status) {
-            return retFailure
+        val testUrl = SettingsManager.getDelayTestUrl()
+        val directConfig = DirectSpeedtestConfigManager.build(context, guid)
+
+        if (!directConfig.status) {
+            val fullConfig = CoreConfigManager.getV2rayConfig(context, guid)
+            if (!fullConfig.status) return retFailure
+            return CoreNativeManager.measureOutboundDelay(fullConfig.content, testUrl)
         }
-        return CoreNativeManager.measureOutboundDelay(
-            configResult.content,
-            SettingsManager.getDelayTestUrl()
-        )
+
+        val startedAt = SystemClock.elapsedRealtime()
+        val directResult = CoreNativeManager.measureOutboundDelay(directConfig.content, testUrl)
+        if (directResult > 0L) return directResult
+
+        val elapsed = SystemClock.elapsedRealtime() - startedAt
+        if (elapsed >= QUICK_FAILURE_FALLBACK_MS) {
+            return directResult
+        }
+
+        val fullConfig = CoreConfigManager.getV2rayConfig(context, guid)
+        if (fullConfig.status && fullConfig.content != directConfig.content) {
+            val fallbackResult = CoreNativeManager.measureOutboundDelay(fullConfig.content, testUrl)
+            if (fallbackResult > 0L) return fallbackResult
+        }
+
+        return directResult
     }
 
     private fun startTcping(guid: String): Long {
@@ -121,5 +144,9 @@ class RealPingWorkerService(
         }
 
         return retFailure
+    }
+
+    companion object {
+        private const val QUICK_FAILURE_FALLBACK_MS = 750L
     }
 }
