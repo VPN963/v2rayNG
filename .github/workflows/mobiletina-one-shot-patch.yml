@@ -27,29 +27,28 @@ jobs:
           from pathlib import Path
           import re
 
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+          def one(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f"{label}: source pattern not found")
               return text.replace(old, new, 1)
 
           root = Path('V2rayNG/app/src/main')
 
-          # 1) Center the Auto/Manual labels exactly and make Smart Connect cancellable.
-          main_path = root / 'java/com/v2ray/ang/ui/MainActivity.kt'
-          main = main_path.read_text()
-          main = replace_once(
-              main,
-              '    private var lastConnectedPing: String? = null\n',
-              '    private var lastConnectedPing: String? = null\n    private var smartConnectJob: kotlinx.coroutines.Job? = null\n',
-              'smartConnectJob field',
-          )
+          # MainActivity: exact centered mode labels + cancellable Smart Connect.
+          p = root / 'java/com/v2ray/ang/ui/MainActivity.kt'
+          s = p.read_text()
 
-          mode_pattern = re.compile(
-              r'    private fun setupModeTabs\(\) \{.*?\n    \}\n\n    private fun setMode',
-              re.S,
-          )
-          mode_replacement = '''    private fun setupModeTabs() {
+          if 'private var smartConnectJob: kotlinx.coroutines.Job? = null' not in s:
+              s = one(
+                  s,
+                  '    private var lastConnectedPing: String? = null\n',
+                  '    private var lastConnectedPing: String? = null\n    private var smartConnectJob: kotlinx.coroutines.Job? = null\n',
+                  'smartConnectJob field',
+              )
+
+          if 'private fun createModeTab(textRes: Int): TabLayout.Tab' not in s:
+              pattern = re.compile(r'    private fun setupModeTabs\(\) \{.*?\n    \}\n\n    private fun setMode', re.S)
+              replacement = '''    private fun setupModeTabs() {
               binding.modeTabs.removeAllTabs()
               binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_auto), true)
               binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_manual), false)
@@ -81,25 +80,28 @@ jobs:
           }
 
           private fun setMode'''
-          main, n = mode_pattern.subn(mode_replacement, main, count=1)
-          if n != 1:
-              raise SystemExit(f'setupModeTabs: expected one block, found {n}')
+              s, n = pattern.subn(replacement, s, count=1)
+              if n != 1:
+                  raise SystemExit(f'setupModeTabs: expected one block, found {n}')
 
-          main = replace_once(
-              main,
-              '        if (smartConnecting) return\n\n        smartConnecting = true',
-              '        if (smartConnecting) {\n            cancelSmartConnect()\n            return\n        }\n\n        smartConnecting = true',
-              'smart connect second tap',
-          )
-          main = replace_once(
-              main,
-              '        refreshSelectedServerUi()\n\n        lifecycleScope.launch {\n            // Do not consume the six-second Real Delay window while a subscription refresh is still running.',
-              '        refreshSelectedServerUi()\n\n        smartConnectJob?.cancel()\n        smartConnectJob = lifecycleScope.launch {\n            // Do not consume the six-second Real Delay window while a subscription refresh is still running.',
-              'smart connect job assignment',
-          )
+          if 'if (smartConnecting) {\n            cancelSmartConnect()' not in s:
+              s = one(
+                  s,
+                  '        if (smartConnecting) return\n\n        smartConnecting = true',
+                  '        if (smartConnecting) {\n            cancelSmartConnect()\n            return\n        }\n\n        smartConnecting = true',
+                  'smart connect second tap',
+              )
 
-          cancel_method = '''
-          private fun cancelSmartConnect() {
+          if 'smartConnectJob = lifecycleScope.launch {' not in s:
+              s = one(
+                  s,
+                  '        refreshSelectedServerUi()\n\n        lifecycleScope.launch {\n            // Do not consume the six-second Real Delay window while a subscription refresh is still running.',
+                  '        refreshSelectedServerUi()\n\n        smartConnectJob?.cancel()\n        smartConnectJob = lifecycleScope.launch {\n            // Do not consume the six-second Real Delay window while a subscription refresh is still running.',
+                  'smart connect job assignment',
+              )
+
+          if 'private fun cancelSmartConnect()' not in s:
+              cancel_method = '''    private fun cancelSmartConnect() {
               smartConnectJob?.cancel()
               smartConnectJob = null
               mainViewModel.cancelRealPing()
@@ -114,44 +116,48 @@ jobs:
           }
 
           '''
-          main = replace_once(
-              main,
-              '    private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {',
-              cancel_method + '    private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {',
-              'cancelSmartConnect insertion',
+              s = one(
+                  s,
+                  '    private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {',
+                  cancel_method + '    private fun requestVpnPermissionAndStart(isSmartConnect: Boolean) {',
+                  'cancelSmartConnect insertion',
+              )
+          p.write_text(s)
+
+          # Main layout: move automatic controls slightly lower and eliminate hidden tab padding.
+          p = root / 'res/layout/activity_main.xml'
+          s = p.read_text()
+          if 'android:paddingTop="52dp"' in s:
+              s = s.replace('android:paddingTop="52dp"', 'android:paddingTop="72dp"', 1)
+          elif 'android:paddingTop="72dp"' not in s:
+              raise SystemExit('auto panel padding: neither old nor new value found')
+
+          if 'app:tabPaddingStart="0dp"' not in s:
+              s = one(
+                  s,
+                  '                app:tabMode="fixed"\n                app:tabRippleColor="@android:color/transparent" />',
+                  '                app:tabMode="fixed"\n                app:tabPaddingStart="0dp"\n                app:tabPaddingEnd="0dp"\n                app:tabPaddingTop="0dp"\n                app:tabPaddingBottom="0dp"\n                app:tabRippleColor="@android:color/transparent" />',
+                  'mode tab padding',
+              )
+          p.write_text(s)
+
+          # Main toolbar menu: Service Restart remains defined but is invisible.
+          p = root / 'res/menu/menu_main.xml'
+          s = p.read_text()
+          service_block = re.compile(
+              r'(<item\s*\n\s*android:id="@\+id/service_restart"\s*\n\s*android:title="@string/title_service_restart")(?P<tail>\s*\n\s*app:showAsAction="never"\s*/>)',
+              re.S,
           )
-          main_path.write_text(main)
+          match = service_block.search(s)
+          if match and 'android:visible="false"' not in match.group(0):
+              s = service_block.sub(r'\1\n        android:visible="false"\g<tail>', s, count=1)
+          elif not match and 'android:id="@+id/service_restart"' not in s:
+              raise SystemExit('service restart menu item missing')
+          p.write_text(s)
 
-          # 2) Move the Auto dashboard a little lower and remove all implicit tab padding.
-          layout_path = root / 'res/layout/activity_main.xml'
-          layout = layout_path.read_text()
-          layout = replace_once(layout, 'android:paddingTop="52dp"', 'android:paddingTop="72dp"', 'auto panel vertical offset')
-          layout = replace_once(
-              layout,
-              '                app:tabMode="fixed"\n                app:tabRippleColor="@android:color/transparent" />',
-              '                app:tabMode="fixed"\n                app:tabPaddingStart="0dp"\n                app:tabPaddingEnd="0dp"\n                app:tabPaddingTop="0dp"\n                app:tabPaddingBottom="0dp"\n                app:tabRippleColor="@android:color/transparent" />',
-              'mode tab padding',
-          )
-          layout_path.write_text(layout)
-
-          # 3) Hide Service Restart while keeping the ID for 2.0.15 source compatibility.
-          menu_path = root / 'res/menu/menu_main.xml'
-          menu = menu_path.read_text()
-          service_restart_old = '''    <item
-              android:id="@+id/service_restart"
-              android:title="@string/title_service_restart"
-              app:showAsAction="never" />'''
-          service_restart_new = '''    <item
-              android:id="@+id/service_restart"
-              android:title="@string/title_service_restart"
-              android:visible="false"
-              app:showAsAction="never" />'''
-          menu = replace_once(menu, service_restart_old, service_restart_new, 'service restart visibility')
-          menu_path.write_text(menu)
-
-          # 4) Drawer: one visible item per group so NavigationView renders a separator between each row.
-          drawer_path = root / 'res/menu/menu_drawer.xml'
-          drawer_path.write_text('''<?xml version="1.0" encoding="utf-8"?>
+          # Drawer: each visible destination in a separate group => Material divider between rows.
+          p = root / 'res/menu/menu_drawer.xml'
+          p.write_text('''<?xml version="1.0" encoding="utf-8"?>
           <menu xmlns:android="http://schemas.android.com/apk/res/android"
               xmlns:tools="http://schemas.android.com/tools"
               tools:showIn="navigation_view">
@@ -184,7 +190,6 @@ jobs:
                       android:title="@string/mobiletina_delete_vpn" />
               </group>
 
-              <!-- Keep legacy IDs defined for 2.0.15 compile compatibility, but unreachable. -->
               <group android:id="@+id/group_mobiletina_hidden" android:visible="false">
                   <item android:id="@+id/routing_setting" android:title="@string/routing_settings_title" />
                   <item android:id="@+id/user_asset_setting" android:title="@string/title_user_asset_setting" />
@@ -196,43 +201,52 @@ jobs:
           </menu>
           ''')
 
-          # 5) Start Scanning Immediately defaults to enabled. Stored false still wins if user disables it.
-          pref_path = root / 'res/xml/pref_settings.xml'
-          pref = pref_path.read_text()
-          pref = replace_once(
-              pref,
-              '        <CheckBoxPreference\n            android:key="pref_start_scan_immediate"',
-              '        <CheckBoxPreference\n            android:defaultValue="true"\n            android:key="pref_start_scan_immediate"',
-              'scan preference default',
-          )
-          pref_path.write_text(pref)
+          # Scanner preference: default enabled, but a stored user choice of false remains respected.
+          p = root / 'res/xml/pref_settings.xml'
+          s = p.read_text()
+          if 'android:defaultValue="true"\n            android:key="pref_start_scan_immediate"' not in s:
+              s = one(
+                  s,
+                  '        <CheckBoxPreference\n            android:key="pref_start_scan_immediate"',
+                  '        <CheckBoxPreference\n            android:defaultValue="true"\n            android:key="pref_start_scan_immediate"',
+                  'scan preference default',
+              )
+          p.write_text(s)
 
-          scanner_path = root / 'java/com/v2ray/ang/ui/ScannerActivity.kt'
-          scanner = scanner_path.read_text()
-          scanner = replace_once(
-              scanner,
-              'MmkvManager.decodeSettingsBool(AppConfig.PREF_START_SCAN_IMMEDIATE)',
-              'MmkvManager.decodeSettingsBool(AppConfig.PREF_START_SCAN_IMMEDIATE, true)',
-              'scanner runtime default',
-          )
-          scanner_path.write_text(scanner)
+          p = root / 'java/com/v2ray/ang/ui/ScannerActivity.kt'
+          s = p.read_text()
+          old = 'MmkvManager.decodeSettingsBool(AppConfig.PREF_START_SCAN_IMMEDIATE)'
+          new = 'MmkvManager.decodeSettingsBool(AppConfig.PREF_START_SCAN_IMMEDIATE, true)'
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('scanner runtime setting pattern missing')
+          p.write_text(s)
 
-          # 6) Remove only the generic "Start services" toast; keep proxy-sharing warnings.
-          service_path = root / 'java/com/v2ray/ang/handler/V2RayServiceManager.kt'
-          service = service_path.read_text()
-          service = replace_once(
-              service,
-              '''        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
+          # Remove generic Start services toast. Proxy-sharing warning is intentionally retained.
+          p = root / 'java/com/v2ray/ang/handler/V2RayServiceManager.kt'
+          s = p.read_text()
+          old = '''        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
               context.toast(R.string.toast_warning_pref_proxysharing_short)
           } else {
               context.toast(R.string.toast_services_start)
-          }''',
-              '''        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
+          }'''
+          new = '''        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
               context.toast(R.string.toast_warning_pref_proxysharing_short)
-          }''',
-              'start service toast',
-          )
-          service_path.write_text(service)
+          }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'context.toast(R.string.toast_services_start)' in s:
+              # Whitespace-tolerant fallback.
+              s, n = re.subn(
+                  r'        if \(MmkvManager\.decodeSettingsBool\(AppConfig\.PREF_PROXY_SHARING\)\) \{\s*context\.toast\(R\.string\.toast_warning_pref_proxysharing_short\)\s*\} else \{\s*context\.toast\(R\.string\.toast_services_start\)\s*\}',
+                  '        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {\n            context.toast(R.string.toast_warning_pref_proxysharing_short)\n        }',
+                  s,
+                  count=1,
+              )
+              if n != 1:
+                  raise SystemExit('start services toast block not matched')
+          p.write_text(s)
           PY
 
       - name: Commit source refinements
