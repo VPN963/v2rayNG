@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <application>
         <activity
             android:name=".ui.MainActivity"
@@ -13,6 +15,10 @@
 
         <activity
             android:name=".ui.MobileTinaStoreAboutActivity"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.MobileTinaExpiryReceiver"
             android:exported="false" />
 
         <receiver
