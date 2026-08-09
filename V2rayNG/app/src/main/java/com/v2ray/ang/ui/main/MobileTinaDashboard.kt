@@ -58,7 +58,8 @@ fun MobileTinaDashboard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 18.dp),
+            .padding(horizontal = 18.dp)
+            .padding(top = 54.dp, bottom = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         MobileTinaAutoConnectButton(
