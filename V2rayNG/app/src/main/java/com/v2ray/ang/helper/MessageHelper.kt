@@ -15,63 +15,41 @@ import java.io.Serializable
 
 object MessageHelper {
 
-
-    /**
-     * Sends a message to the service.
-     *
-     * @param ctx The context.
-     * @param what The message identifier.
-     * @param content The message content.
-     */
     fun sendMsg2Service(ctx: Context, what: Int, content: Serializable) {
         sendMsg(ctx, AppConfig.BROADCAST_ACTION_SERVICE, what, content)
     }
 
-    /**
-     * Sends a message to the UI.
-     *
-     * @param ctx The context.
-     * @param what The message identifier.
-     * @param content The message content.
-     */
     fun sendMsg2UI(ctx: Context, what: Int, content: Serializable) {
         sendMsg(ctx, AppConfig.BROADCAST_ACTION_ACTIVITY, what, content)
     }
 
-    /**
-     * Sends a message to the short-lived real-delay test service.
-     *
-     * MobileTina intentionally runs CoreTestService as a normal started service while the app is
-     * in the foreground. This removes the user-visible Real Delay foreground notification. The
-     * service is used only for UI-triggered ping tests and Smart Connect, and stops itself after
-     * the test batch finishes.
-     */
     fun sendMsg2TestService(ctx: Context, message: TestServiceMessage) {
         try {
             val intent = Intent()
             intent.component = ComponentName(ctx, CoreTestService::class.java)
             intent.putExtra("content", message)
             when (message.key) {
-                AppConfig.MSG_MEASURE_CONFIG_START -> ctx.startService(intent)
+                AppConfig.MSG_MEASURE_CONFIG_START -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        ContextCompat.startForegroundService(ctx, intent)
+                    } else {
+                        ctx.startService(intent)
+                    }
+                }
 
                 AppConfig.MSG_MEASURE_CONFIG_CANCEL -> {
-                    // Do not wake up service just to cancel; stop only if it is already running.
                     ctx.stopService(intent)
                 }
 
-                else -> ctx.startService(intent)
+                else -> {
+                    ctx.startService(intent)
+                }
             }
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to send message to test service", e)
         }
     }
 
-    /**
-     * Sends a message to the subscription service.
-     *
-     * @param ctx The context.
-     * @param message The subscription service message containing key and subId.
-     */
     fun sendMsg2SubscriptionService(ctx: Context, message: SubscriptionUpdateMessage) {
         try {
             val intent = Intent()
@@ -99,14 +77,6 @@ object MessageHelper {
         }
     }
 
-    /**
-     * Sends a message with the specified action.
-     *
-     * @param ctx The context.
-     * @param action The action string.
-     * @param what The message identifier.
-     * @param content The message content.
-     */
     private fun sendMsg(ctx: Context, action: String, what: Int, content: Serializable) {
         try {
             val intent = Intent()

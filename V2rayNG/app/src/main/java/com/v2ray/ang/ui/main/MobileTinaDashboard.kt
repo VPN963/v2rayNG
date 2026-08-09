@@ -59,7 +59,7 @@ fun MobileTinaDashboard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp)
-            .padding(top = 54.dp, bottom = 18.dp),
+            .padding(top = 88.dp, bottom = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         MobileTinaAutoConnectButton(
@@ -88,8 +88,6 @@ fun MobileTinaDashboard(
 
         Spacer(Modifier.height(26.dp))
 
-        // Subscription usage belongs at the bottom of Automatic mode so the primary action stays
-        // visually dominant and matches MobileTina's connection-first layout.
         MobileTinaSubscriptionStatusCard(
             selectedSubscriptionId = selectedSubscriptionId,
             refreshKey = subscriptionRefreshKey,

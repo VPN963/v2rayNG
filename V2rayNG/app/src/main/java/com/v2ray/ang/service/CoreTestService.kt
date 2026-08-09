@@ -1,25 +1,45 @@
 package com.v2ray.ang.service
 
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import androidx.core.app.NotificationCompat
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.TestServiceMessage
+import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.MessageHelper
+import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import java.util.Collections
 
 class CoreTestService : Service() {
 
-    // Manage active batch workers so each batch is independent and cancellable.
     private val activeWorkers = Collections.synchronizedList(mutableListOf<RealPingWorkerService>())
+    private val cancelAction by lazy {
+        val intent = Intent(this, CoreTestService::class.java).putExtra(
+            "content",
+            TestServiceMessage(AppConfig.MSG_MEASURE_CONFIG_CANCEL)
+        )
+        val pendingIntent = PendingIntent.getService(
+            this,
+            NotificationChannelType.CORE_TEST.notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        NotificationCompat.Action.Builder(
+            R.drawable.ic_stop_24dp,
+            getString(android.R.string.cancel),
+            pendingIntent
+        ).build()
+    }
 
-    /** Initializes the Xray environment. */
     override fun onCreate() {
         super.onCreate()
         CoreNativeManager.initCoreEnv(this)
@@ -35,16 +55,22 @@ class CoreTestService : Service() {
         val snapshot = ArrayList(activeWorkers)
         snapshot.forEach { it.cancel() }
         activeWorkers.clear()
+        NotificationHelper.stopForeground(this)
         super.onDestroy()
     }
 
-    /**
-     * Real Delay is intentionally a short-lived normal service in MobileTina. It therefore does
-     * not call startForeground() and does not create/update a test notification.
-     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        NotificationHelper.startForeground(
+            this,
+            NotificationChannelType.CORE_TEST,
+            getString(R.string.app_name),
+            getString(R.string.title_real_ping_all_server),
+            cancelAction
+        )
+
         val message = intent?.serializable<TestServiceMessage>("content")
         if (message == null) {
+            NotificationHelper.stopForeground(this)
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -52,7 +78,10 @@ class CoreTestService : Service() {
         when (message.key) {
             AppConfig.MSG_MEASURE_CONFIG_START -> handleMeasureStart(message, startId)
             AppConfig.MSG_MEASURE_CONFIG_CANCEL -> handleMeasureCancel()
-            else -> stopSelf(startId)
+            else -> {
+                NotificationHelper.stopForeground(this)
+                stopSelf(startId)
+            }
         }
         return START_NOT_STICKY
     }
@@ -82,6 +111,7 @@ class CoreTestService : Service() {
             activeWorkers.add(worker)
             worker.start()
         } else {
+            NotificationHelper.stopForeground(this)
             stopSelf(startId)
         }
     }
@@ -93,6 +123,12 @@ class CoreTestService : Service() {
     ) {
         when (event) {
             is RealPingEvent.Progress -> {
+                NotificationHelper.updateNotification(
+                    channelType = NotificationChannelType.CORE_TEST,
+                    context = this,
+                    title = getString(R.string.app_name),
+                    content = getString(R.string.connection_running_task_left, event.text)
+                )
                 MessageHelper.sendMsg2UI(
                     this,
                     AppConfig.MSG_MEASURE_CONFIG_NOTIFY,
@@ -135,6 +171,7 @@ class CoreTestService : Service() {
                 )
                 onWorkerDone()
                 if (activeWorkers.isEmpty()) {
+                    NotificationHelper.stopForeground(this)
                     stopSelf()
                 }
             }
@@ -142,21 +179,15 @@ class CoreTestService : Service() {
     }
 
     private fun handleMeasureCancel() {
+        MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_FINISH, "0")
         val snapshot = ArrayList(activeWorkers)
         LogUtil.i(
             AppConfig.TAG,
             "CoreTestService received cancel message, cancelling ${snapshot.size} active workers"
         )
-
-        // A no-op cancel used before a fresh batch must not be reported as that batch's Finish.
-        // Otherwise an event-driven Smart Connect waiter could consume the stale cancellation event
-        // and continue before the new Real Delay batch has actually completed.
-        if (snapshot.isNotEmpty()) {
-            MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_FINISH, "0")
-        }
-
         snapshot.forEach { it.cancel() }
         activeWorkers.clear()
+        NotificationHelper.stopForeground(this)
         stopSelf()
     }
 }
