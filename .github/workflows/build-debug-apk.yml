@@ -57,13 +57,11 @@ jobs:
       - name: Copy libhevtun
         run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-      - name: Fetch AndroidLibXrayLite tag
-        run: |
-          pushd AndroidLibXrayLite
-          CURRENT_TAG=$(git describe --tags --abbrev=0)
-          echo "Current tag in this repo: $CURRENT_TAG"
-          echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-          popd
+      # v2rayNG 2.0.15 used AndroidLibXrayLite at commit c0a0231,
+      # whose go.mod pins xray-core v26.2.6. Pin the matching released AAR
+      # so we can isolate the Real Delay regression from newer core changes.
+      - name: Select v2rayNG 2.0.15 Xray core
+        run: echo "CURRENT_TAG=v26.2.6" >> $GITHUB_ENV
 
       - name: Download libv2ray
         uses: robinraju/release-downloader@v1.13
