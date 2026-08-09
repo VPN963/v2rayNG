@@ -1,0 +1,37 @@
+name: MobileTina swipe dock and version patch
+
+on:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-swipe-dock-version-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python3 .github/scripts/mobiletina_swipe_dock_version_patch.py
+
+      - name: Validate and commit
+        run: |
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add V2rayNG/app/src/main V2rayNG/app/build.gradle.kts
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Fix two-way swipe and manual dock; set version 2.0.15"
+          git push origin HEAD:agent/mobiletina-2.0.15-base
