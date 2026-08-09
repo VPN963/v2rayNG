@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.entities.ServersCache
+import com.v2ray.ang.service.SpeedtestDiagnostics
 import com.v2ray.ang.ui.compose.ItemDivider
 import com.v2ray.ang.ui.compose.ReorderableGridItem
 import com.v2ray.ang.ui.compose.ReorderableListItem
@@ -199,6 +199,7 @@ private fun ServerItemRow(
     onSelectServer: (String) -> Unit
 ) {
     ServerListItem(
+        serverGuid = serverCache.guid,
         remarks = serverCache.profile.remarks,
         testDelayMillis = serverCache.testDelayMillis,
         isSelected = serverCache.guid == selectedGuid,
@@ -214,6 +215,7 @@ private fun ServerItemColumn(
 ) {
     Column {
         ServerListItem(
+            serverGuid = serverCache.guid,
             remarks = serverCache.profile.remarks,
             testDelayMillis = serverCache.testDelayMillis,
             isSelected = serverCache.guid == selectedGuid,
@@ -225,6 +227,7 @@ private fun ServerItemColumn(
 
 @Composable
 fun ServerListItem(
+    serverGuid: String,
     remarks: String,
     testDelayMillis: Long,
     isSelected: Boolean,
@@ -232,7 +235,9 @@ fun ServerListItem(
     modifier: Modifier = Modifier,
     dragModifier: Modifier = Modifier
 ) {
+    val diagnostic = if (testDelayMillis < 0L) SpeedtestDiagnostics.get(serverGuid) else null
     val pingText: String? = when {
+        testDelayMillis < 0L && diagnostic != null -> diagnostic.shortLabel
         testDelayMillis < 0L -> stringResource(R.string.mobiletina_ping_inactive)
         testDelayMillis > 0L -> testDelayMillis.toString()
         else -> null
@@ -261,15 +266,27 @@ fun ServerListItem(
             }
         }
 
-        Text(
-            text = remarks,
+        Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 10.dp, vertical = 12.dp),
-            style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+                .padding(horizontal = 10.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = remarks,
+                style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (diagnostic != null) {
+                Text(
+                    text = diagnostic.displayMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorPingRed,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
 
         if (pingText != null) {
             Text(
