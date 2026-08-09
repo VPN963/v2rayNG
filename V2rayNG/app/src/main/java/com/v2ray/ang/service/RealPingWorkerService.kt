@@ -47,12 +47,19 @@ class RealPingWorkerService(
             scope.launch {
                 runningCount.incrementAndGet()
                 try {
+                    if (!onlyTcp) SpeedtestDiagnostics.clear(guid)
                     val result = if (onlyTcp) startTcping(guid) else startRealPing(guid)
+                    if (result > 0L && !onlyTcp) SpeedtestDiagnostics.clear(guid)
                     if (scope.isActive) {
                         onEvent(RealPingEvent.Result(guid, result))
                     }
-                } catch (_: Throwable) {
-                    // Keep one bad profile from cancelling the rest of the batch.
+                } catch (t: Throwable) {
+                    if (!onlyTcp) {
+                        SpeedtestDiagnostics.record(guid, "WORKER", t)
+                    }
+                    if (scope.isActive) {
+                        onEvent(RealPingEvent.Result(guid, -1L))
+                    }
                 } finally {
                     val count = totalCount.decrementAndGet()
                     val left = runningCount.decrementAndGet()
@@ -90,60 +97,84 @@ class RealPingWorkerService(
     }
 
     /**
-     * Measure delay through a fully started temporary CoreController instead of relying only on
-     * Libv2ray.measureOutboundDelay(). The static helper strips most Xray app modules before
-     * starting the temporary instance; that behavior was safe with the older 2.0.15-era core but
-     * can reject newer transports/config shapes immediately on newer Xray builds.
+     * Diagnostic Real Delay path.
      *
-     * A live controller parses and starts the test config through the same core lifecycle used by
-     * a normal connection, then measures delay on the running instance. The historical static
-     * helper remains a final compatibility fallback so nodes that already worked do not regress.
+     * Every stage that can fail before a positive delay is captured by GUID. The UI can then show
+     * whether a node failed while building config, starting Xray, doing TLS/network delay, or in
+     * the legacy static MeasureOutboundDelay helper.
      */
     private fun startRealPing(guid: String): Long {
         val directConfig = DirectSpeedtestConfigManager.build(context, guid)
         val configResult = if (directConfig.status) {
             directConfig
         } else {
-            CoreConfigManager.getV2rayConfig4Speedtest(context, guid)
+            SpeedtestDiagnostics.recordMessage(guid, "DIRECT CONFIG", directConfig.errorMessage)
+            val fallbackConfig = CoreConfigManager.getV2rayConfig4Speedtest(context, guid)
+            if (!fallbackConfig.status) {
+                SpeedtestDiagnostics.recordMessage(guid, "SPEED CONFIG", fallbackConfig.errorMessage)
+                return -1L
+            }
+            fallbackConfig
         }
-        if (!configResult.status) return -1L
 
         val primaryUrl = SettingsManager.getDelayTestUrl()
         val secondaryUrl = SettingsManager.getDelayTestUrl(true)
 
-        val controller = CoreNativeManager.newCoreController(TestCoreCallback())
+        var controller: libv2ray.CoreController? = null
         try {
-            controller.startLoop(configResult.content, 0)
+            controller = CoreNativeManager.newCoreController(TestCoreCallback())
+            try {
+                controller.startLoop(configResult.content, 0)
+            } catch (t: Throwable) {
+                SpeedtestDiagnostics.record(guid, "CORE START", t)
+            }
+
             if (controller.isRunning) {
-                val first = tryMeasureController(controller, primaryUrl)
+                val first = tryMeasureController(guid, controller, primaryUrl, "LIVE PRIMARY")
                 if (first > 0L) return first
 
-                val second = tryMeasureController(controller, secondaryUrl)
+                val second = tryMeasureController(guid, controller, secondaryUrl, "LIVE SECONDARY")
                 if (second > 0L) return second
+            } else {
+                SpeedtestDiagnostics.recordMessage(guid, "CORE START", "CoreController did not enter running state")
             }
-        } catch (_: Throwable) {
-            // Fall through to the static helper below. The controller path is preferred because
-            // it preserves the complete Xray app graph, but the old helper is kept for compatibility.
+        } catch (t: Throwable) {
+            SpeedtestDiagnostics.record(guid, "CORE CREATE", t)
         } finally {
             try {
-                if (controller.isRunning) {
+                if (controller?.isRunning == true) {
                     controller.stopLoop()
                 }
-            } catch (_: Throwable) {
-                // ignore cleanup errors
+            } catch (t: Throwable) {
+                SpeedtestDiagnostics.record(guid, "CORE STOP", t)
             }
         }
 
-        val staticPrimary = CoreNativeManager.measureOutboundDelay(configResult.content, primaryUrl)
-        if (staticPrimary > 0L) return staticPrimary
+        val staticPrimary = CoreNativeManager.measureOutboundDelayDetailed(configResult.content, primaryUrl)
+        if (staticPrimary.delayMillis > 0L) return staticPrimary.delayMillis
+        SpeedtestDiagnostics.recordMessage(guid, "STATIC PRIMARY", staticPrimary.errorMessage)
 
-        return CoreNativeManager.measureOutboundDelay(configResult.content, secondaryUrl)
+        val staticSecondary = CoreNativeManager.measureOutboundDelayDetailed(configResult.content, secondaryUrl)
+        if (staticSecondary.delayMillis > 0L) return staticSecondary.delayMillis
+        SpeedtestDiagnostics.recordMessage(guid, "STATIC SECONDARY", staticSecondary.errorMessage)
+
+        return -1L
     }
 
-    private fun tryMeasureController(controller: libv2ray.CoreController, url: String): Long {
+    private fun tryMeasureController(
+        guid: String,
+        controller: libv2ray.CoreController,
+        url: String,
+        stage: String
+    ): Long {
         return try {
-            controller.measureDelay(url)
-        } catch (_: Throwable) {
+            val delay = controller.measureDelay(url)
+            if (delay < 0L) {
+                SpeedtestDiagnostics.recordMessage(guid, stage, "CoreController returned $delay without throwing an exception")
+            }
+            delay
+        } catch (t: Throwable) {
+            SpeedtestDiagnostics.record(guid, stage, t)
             -1L
         }
     }
