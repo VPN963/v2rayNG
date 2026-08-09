@@ -2,7 +2,6 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <!-- Keep the three MobileTina toolbar actions visible: QR, Add and overflow. -->
     <item
         android:id="@+id/import_qrcode"
         android:icon="@drawable/ic_scan_24dp"
@@ -66,14 +65,6 @@
         android:title="@string/title_service_restart"
         app:showAsAction="never" />
     <item
-        android:id="@+id/mobiletina_locate_selected"
-        android:title="@string/mobiletina_locate_selected"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/ping_all"
-        android:title="@string/title_ping_all_server"
-        app:showAsAction="never" />
-    <item
         android:id="@+id/real_ping_all"
         android:title="@string/title_real_ping_all_server"
         app:showAsAction="never" />
@@ -96,5 +87,17 @@
     <item
         android:id="@+id/del_all_config"
         android:title="@string/title_del_all_config"
+        app:showAsAction="never" />
+
+    <!-- Hidden legacy IDs preserve source compatibility while removing these actions from MobileTina. -->
+    <item
+        android:id="@+id/mobiletina_locate_selected"
+        android:title="@string/mobiletina_locate_selected"
+        android:visible="false"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/ping_all"
+        android:title="@string/title_ping_all_server"
+        android:visible="false"
         app:showAsAction="never" />
 </menu>
