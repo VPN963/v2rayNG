@@ -141,49 +141,42 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
     }
 
     private fun setupModeTabs() {
-        binding.modeTabs.removeAllTabs()
-        binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_auto), true)
-        binding.modeTabs.addTab(createModeTab(R.string.mobiletina_mode_manual), false)
-        binding.modeTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) = setMode(tab.position, updateTab = false)
-            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-            override fun onTabReselected(tab: TabLayout.Tab) = Unit
-        })
+        binding.btnModeManual.setOnClickListener { setMode(MODE_MANUAL) }
+        binding.btnModeAuto.setOnClickListener { setMode(MODE_AUTO) }
         binding.modeContainer.setOnModeSwipeListener { direction ->
-            if (direction > 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
+            // User preference: swipe LEFT -> RIGHT to go from Auto to Manual.
+            if (direction < 0) setMode(MODE_MANUAL) else setMode(MODE_AUTO)
         }
         setMode(MODE_AUTO)
-    }
-
-    private fun createModeTab(textRes: Int): TabLayout.Tab {
-        val density = resources.displayMetrics.density
-        val label = TextView(this).apply {
-            setText(textRes)
-            gravity = android.view.Gravity.CENTER
-            textAlignment = View.TEXT_ALIGNMENT_CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            includeFontPadding = false
-            textSize = 17f
-            // Optical correction for the visible Persian glyph bounds.
-            translationX = -7f * density
-            setPadding(0, 0, 0, 0)
-            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.colorTextPrimary))
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-        return binding.modeTabs.newTab().setText(textRes).setCustomView(label)
     }
 
     private fun setMode(mode: Int, updateTab: Boolean = true) {
         currentMode = mode.coerceIn(MODE_AUTO, MODE_MANUAL)
         binding.autoPanel.visibility = if (currentMode == MODE_AUTO) View.VISIBLE else View.GONE
         binding.manualPanel.visibility = if (currentMode == MODE_MANUAL) View.VISIBLE else View.GONE
-        if (updateTab && binding.modeTabs.selectedTabPosition != currentMode) {
-            binding.modeTabs.getTabAt(currentMode)?.select()
-        }
+        updateModeSelector()
         refreshSelectedServerUi()
+    }
+
+    private fun updateModeSelector() {
+        val manualSelected = currentMode == MODE_MANUAL
+        val autoSelected = currentMode == MODE_AUTO
+        binding.btnModeManual.isSelected = manualSelected
+        binding.btnModeAuto.isSelected = autoSelected
+
+        fun style(button: com.google.android.material.button.MaterialButton, selected: Boolean) {
+            button.backgroundTintList = ColorStateList.valueOf(
+                if (selected) Color.rgb(86, 86, 91) else Color.rgb(34, 34, 38)
+            )
+            button.strokeColor = ColorStateList.valueOf(
+                if (selected) Color.rgb(106, 106, 112) else Color.rgb(52, 52, 58)
+            )
+            button.setTextColor(Color.WHITE)
+        }
+        style(binding.btnModeManual, manualSelected)
+        style(binding.btnModeAuto, autoSelected)
+        binding.modeIndicatorManual.setBackgroundColor(if (manualSelected) Color.WHITE else Color.TRANSPARENT)
+        binding.modeIndicatorAuto.setBackgroundColor(if (autoSelected) Color.WHITE else Color.TRANSPARENT)
     }
 
     private fun setupGroupPager() {
@@ -545,6 +538,7 @@ class MainActivity : HelperBaseActivity(), com.google.android.material.navigatio
         binding.tvAutoServer.text = profile?.remarks.orEmpty()
         binding.tvManualSelected.text = profile?.remarks.orEmpty()
         binding.tvManualPing.text = pingLabel(ping)
+        binding.manualSelectedRow.visibility = if (profile != null) View.VISIBLE else View.INVISIBLE
 
         val autoBackground: Int
         val autoTint: Int
