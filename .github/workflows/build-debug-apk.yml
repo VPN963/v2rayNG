@@ -35,6 +35,7 @@ jobs:
             --channel=0 \
             --install "ndk;29.0.14206865"
           echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
 
       - name: Restore cached libhevtun
         id: cache-libhevtun-restore
@@ -57,21 +58,32 @@ jobs:
       - name: Copy libhevtun
         run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-      - name: Fetch AndroidLibXrayLite tag
-        run: |
-          pushd AndroidLibXrayLite
-          CURRENT_TAG=$(git describe --tags --abbrev=0)
-          echo "Current tag in this repo: $CURRENT_TAG"
-          echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-          popd
-
-      - name: Download libv2ray
-        uses: robinraju/release-downloader@v1.13
+      # Keep the current AndroidLibXrayLite wrapper/API surface used by MobileTina,
+      # but pin only its xray-core dependency to the exact revision used by v2rayNG 2.0.15.
+      # This isolates the Real Delay engine regression without downgrading the Android wrapper.
+      - name: Setup Go
+        uses: actions/setup-go@v6
         with:
-          repository: '2dust/AndroidLibXrayLite'
-          tag: ${{ env.CURRENT_TAG }}
-          fileName: 'libv2ray.aar'
-          out-file-path: V2rayNG/app/libs/
+          go-version-file: AndroidLibXrayLite/go.mod
+          cache: true
+          cache-dependency-path: AndroidLibXrayLite/go.sum
+
+      - name: Build current AndroidLib wrapper with 2.0.15 Xray core
+        run: |
+          cd ${{ github.workspace }}/AndroidLibXrayLite
+          go mod edit -require=github.com/xtls/xray-core@v1.260123.1-0.20260206094241-12ee51e4bb1d
+          go mod tidy
+          echo "Pinned xray-core:"
+          go list -m github.com/xtls/xray-core
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export PATH="$PATH:$HOME/go/bin"
+          mkdir -p assets data
+          bash gen_assets.sh download
+          cp -v data/*.dat assets/
+          gomobile init
+          gomobile bind -v -androidapi 24 -trimpath -ldflags='-s -w -buildid= -checklinkname=0' ./
+          test -f libv2ray.aar
+          cp -f libv2ray.aar ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
 
       - name: Setup Java
         uses: actions/setup-java@v5.7.0
