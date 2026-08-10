@@ -1,0 +1,13 @@
+FILES:
+.github/hq/Photo.zip.b64
+.github/hq/mt_manual_stop.b64
+.github/hq2/mt_auto_blue.png.part01
+.github/hq2/mt_auto_blue.png.part02
+.github/hq2/mt_auto_blue.png.part03
+.github/hq2/mt_auto_blue.png.part04
+.github/hq2/mt_auto_red.png.part01
+
+CANDIDATES:
+.github/hq/Photo.zip.b64 bytes=14999 sha256=663ac5cf13cb55789ada1059b114a8394c73003b848ecd5b060420b80507b52b MATCH=[]
+.github/hq/mt_manual_stop.b64 bytes=14985 sha256=0dc0f7f09f023030271a7a1e7bd77233d1b75ce7734f6243baad472eec4dddd2 MATCH=[]
+.github/hq2/mt_auto_blue.png [joined] bytes=73310 sha256=6c7d46de9751bda68168d899ecb33e78adf6419a284c5fdde5d8b2866de2ae36 MATCH=[]
