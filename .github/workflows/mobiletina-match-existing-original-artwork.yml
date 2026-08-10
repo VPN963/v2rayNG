@@ -1,0 +1,96 @@
+name: Match existing original MobileTina artwork
+
+on:
+  push:
+    branches: [agent/mobiletina-2.0.15-base]
+    paths: [.github/workflows/mobiletina-match-existing-original-artwork.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+      - name: Scan archived HQ payloads
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64, hashlib, io, zipfile, re
+          expected = {
+            'nav.png':'2862bf7504989f5c11118a5f0ffed8f458439463a5057ff652b3d6be01275fb2',
+            'red.png':'84a3a69f1a460d2b0bf4dc67df95ae97890820adef1bcebfab5f805df3500cac',
+            'stop.webp':'9c785413bec4f4e707e69decfeaa387e1c4d6268f40a1ad357c135770b763abc',
+            'white.png':'53ef59fb2a1e955cd3ed2ead8996559b363210d9c0116c8bf2c70cddeab841f2',
+            'yellow.png':'42a06856d6b8a6b4ecad1d1aa229ddf9bec6aab0313d98aef4c5fd18b22ee8ac',
+            'fab.webp':'e241e1bb92c2130e4b1ba28421cbb2fd15e2e0878448f5cf3c2861080dcc5196',
+            'blue.png':'9f95be3e15015320756549f7ec4a2daf55048104870063269c5a5bcebd32c178',
+          }
+          report=[]
+          roots=[Path('.github/hq'),Path('.github/hq2')]
+          files=[]
+          for r in roots:
+            if r.exists(): files += [p for p in r.rglob('*') if p.is_file()]
+          report.append('FILES:')
+          for p in sorted(files): report.append(str(p))
+
+          # Decode standalone .b64 files.
+          candidates=[]
+          for p in files:
+            if p.suffix == '.b64':
+              txt=''.join(p.read_text(errors='ignore').split())
+              for pad in range(4):
+                try:
+                  b=base64.b64decode(txt + '='*pad, validate=False)
+                  candidates.append((str(p),b)); break
+                except Exception: pass
+
+          # Join *.partNN groups as plain base64 text.
+          groups={}
+          for p in files:
+            m=re.match(r'(.+)\.part(\d+)$', p.name)
+            if m:
+              groups.setdefault((str(p.parent),m.group(1)),[]).append((int(m.group(2)),p))
+          for key,parts in groups.items():
+            parts.sort()
+            txt=''.join(''.join(p.read_text(errors='ignore').split()) for _,p in parts)
+            for pad in range(4):
+              try:
+                b=base64.b64decode(txt + '='*pad, validate=False)
+                candidates.append((key[0]+'/'+key[1]+' [joined]',b)); break
+              except Exception: pass
+
+          # Also test decoded zip members.
+          expanded=[]
+          for label,b in candidates:
+            expanded.append((label,b))
+            if b[:4] == b'PK\x03\x04':
+              try:
+                z=zipfile.ZipFile(io.BytesIO(b))
+                for n in z.namelist():
+                  if not n.endswith('/'):
+                    expanded.append((label+'::'+n,z.read(n)))
+              except Exception as e: report.append(f'ZIPERR {label}: {e}')
+
+          report.append('\nCANDIDATES:')
+          for label,b in expanded:
+            sha=hashlib.sha256(b).hexdigest()
+            matches=[n for n,h in expected.items() if h==sha]
+            report.append(f'{label} bytes={len(b)} sha256={sha} MATCH={matches}')
+          Path('.github/verification').mkdir(parents=True,exist_ok=True)
+          Path('.github/verification/mobiletina-existing-artwork-match.txt').write_text('\n'.join(report)+'\n')
+          print('\n'.join(report))
+      - name: Commit report
+        run: |
+          git config user.name VPN963
+          git config user.email 120357728+VPN963@users.noreply.github.com
+          git add .github/verification/mobiletina-existing-artwork-match.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Inspect existing original MobileTina artwork payloads"
+            git push origin HEAD:agent/mobiletina-2.0.15-base
+          fi
