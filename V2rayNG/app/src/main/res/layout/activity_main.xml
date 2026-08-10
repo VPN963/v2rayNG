@@ -133,7 +133,6 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <!-- Automatic mode -->
             <ScrollView
                 android:id="@+id/auto_panel"
                 android:layout_width="match_parent"
@@ -153,8 +152,8 @@
 
                     <com.google.android.material.imageview.ShapeableImageView
                         android:id="@+id/fab_auto"
-                        android:layout_width="192dp"
-                        android:layout_height="192dp"
+                        android:layout_width="208dp"
+                        android:layout_height="208dp"
                         android:background="@android:color/transparent"
                         android:clickable="true"
                         android:contentDescription="@string/mobiletina_manual_smart_connect"
@@ -275,7 +274,6 @@
                 </LinearLayout>
             </ScrollView>
 
-            <!-- Manual mode -->
             <LinearLayout
                 android:id="@+id/manual_panel"
                 android:layout_width="match_parent"
