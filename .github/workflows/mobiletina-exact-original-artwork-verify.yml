@@ -1,0 +1,189 @@
+name: Verify exact original MobileTina artwork
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-exact-original-artwork-verify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  exact-artwork-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout active branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify exact uploaded artwork bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '2862bf7504989f5c11118a5f0ffed8f458439463a5057ff652b3d6be01275fb2  V2rayNG/app/src/main/res/drawable-nodpi/mt_nav.png' | sha256sum -c -
+          echo '84a3a69f1a460d2b0bf4dc67df95ae97890820adef1bcebfab5f805df3500cac  V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_red.png' | sha256sum -c -
+          echo '9c785413bec4f4e707e69decfeaa387e1c4d6268f40a1ad357c135770b763abc  V2rayNG/app/src/main/res/drawable-nodpi/mt_manual_stop.webp' | sha256sum -c -
+          echo '53ef59fb2a1e955cd3ed2ead8996559b363210d9c0116c8bf2c70cddeab841f2  V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_white.png' | sha256sum -c -
+          echo '42a06856d6b8a6b4ecad1d1aa229ddf9bec6aab0313d98aef4c5fd18b22ee8ac  V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_yellow.png' | sha256sum -c -
+          echo 'e241e1bb92c2130e4b1ba28421cbb2fd15e2e0878448f5cf3c2861080dcc5196  V2rayNG/app/src/main/res/drawable-nodpi/mt_manual_fab.webp' | sha256sum -c -
+          echo '9f95be3e15015320756549f7ec4a2daf55048104870063269c5a5bcebd32c178  V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_blue.png' | sha256sum -c -
+
+          for f in mt_auto_white mt_auto_yellow mt_auto_blue mt_auto_red mt_manual_stop mt_manual_fab mt_nav; do
+            test ! -e "V2rayNG/app/src/main/res/drawable/${f}.xml"
+          done
+
+      - name: Verify neat direct-render layout
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          p = Path('V2rayNG/app/src/main/res/layout/activity_main.xml')
+          s = p.read_text(encoding='utf-8')
+
+          def view(view_id):
+              pattern = re.compile(
+                  r'<com\.google\.android\.material\.imageview\.ShapeableImageView\n'
+                  r'(?P<body>.*?android:id="@\+id/' + re.escape(view_id) + r'".*?)\n\s*/>',
+                  re.S,
+              )
+              m = pattern.search(s)
+              if not m:
+                  raise SystemExit(f'{view_id}: ShapeableImageView not found')
+              return m.group(0)
+
+          auto = view('fab_auto')
+          manual = view('fab')
+
+          for item in ('android:layout_width="208dp"', 'android:layout_height="208dp"',
+                       'android:scaleType="fitCenter"', 'android:background="@android:color/transparent"',
+                       'android:src="@drawable/mt_auto_white"'):
+              if item not in auto:
+                  raise SystemExit(f'Auto FAB guard failed: {item}')
+          if 'tint=' in auto or 'backgroundTint=' in auto:
+              raise SystemExit('Auto artwork must not be tinted')
+
+          for item in ('android:layout_width="92dp"', 'android:layout_height="92dp"',
+                       'android:scaleType="fitCenter"', 'android:src="@drawable/mt_manual_stop"'):
+              if item not in manual:
+                  raise SystemExit(f'Manual FAB guard failed: {item}')
+          if 'tint=' in manual or 'backgroundTint=' in manual:
+              raise SystemExit('Manual artwork must not be tinted')
+
+          if 'android:layout_height="50dp"' not in s:
+              raise SystemExit('Auto-connect button 50dp guard failed')
+
+          nav = Path('V2rayNG/app/src/main/res/layout/nav_header.xml').read_text(encoding='utf-8')
+          if 'android:scaleType="fitCenter"' not in nav or '@drawable/mt_nav' not in nav:
+              raise SystemExit('Drawer artwork guard failed')
+
+      - name: Check source diff
+        run: git diff --check
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3.2.0
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '13114758'
+          packages: 'platforms;android-36.1 build-tools;36.1.0 platform-tools'
+
+      - name: Install NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('V2rayNG/app/build.gradle.kts')
+          text = path.read_text(encoding='utf-8')
+          marker = 'android {\n'
+          if marker not in text:
+              raise SystemExit('android block not found')
+          if 'ndkVersion = "28.2.13676358"' not in text:
+              text = text.replace(marker, marker + '    ndkVersion = "28.2.13676358"\n', 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Restore cached libhevtun
+        id: cache-libhevtun-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: mobiletina-2015-libhevtun-${{ runner.os }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Build libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        run: bash compile-hevtun.sh
+
+      - name: Save libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: mobiletina-2015-libhevtun-${{ runner.os }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Copy libhevtun
+        run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
+
+      - name: Fetch AndroidLibXrayLite tag
+        run: |
+          pushd AndroidLibXrayLite
+          CURRENT_TAG=$(git describe --tags --abbrev=0)
+          echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
+          popd
+
+      - name: Download original 2.0.15 libv2ray
+        uses: robinraju/release-downloader@v1.12
+        with:
+          repository: '2dust/AndroidLibXrayLite'
+          tag: ${{ env.CURRENT_TAG }}
+          fileName: 'libv2ray.aar'
+          out-file-path: V2rayNG/app/libs/
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build ARMv7 APK
+        run: |
+          cd V2rayNG
+          echo "sdk.dir=${ANDROID_HOME}" > local.properties
+          chmod 755 gradlew
+          ./gradlew assemblePlaystoreDebug -PABI_FILTERS=armeabi-v7a
+
+      - name: Commit successful verification marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -- V2rayNG/app/build.gradle.kts
+          mkdir -p .github/verification
+          {
+            echo 'MobileTina exact original artwork verified byte-for-byte and built for ARMv7'
+            echo "Workflow run: $GITHUB_RUN_ID"
+            echo "Source commit: $GITHUB_SHA"
+            echo "UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo 'Auto FAB: 208dp; Manual FAB: 92dp; Auto-connect button: 50dp'
+          } > .github/verification/mobiletina-exact-original-artwork-build-ok.txt
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add .github/verification/mobiletina-exact-original-artwork-build-ok.txt
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m "Verify exact original MobileTina artwork build"
+            git push origin HEAD:agent/mobiletina-2.0.15-base
+          fi
+
+      - name: Upload ARMv7 APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: MobileTina-2.0.15-armeabi-v7a-exact-original-artwork
+          path: V2rayNG/app/build/outputs/apk/playstore/debug/*armeabi-v7a*.apk
+          if-no-files-found: error
