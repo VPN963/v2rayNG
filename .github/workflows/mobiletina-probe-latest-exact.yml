@@ -41,3 +41,5 @@ jobs:
           git add .github/verification/mobiletina-latest-exact-run.txt
           git commit -m "Record latest exact artwork run"
           git push origin HEAD:agent/mobiletina-2.0.15-base
+
+# probe refresh 2
