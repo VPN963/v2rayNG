@@ -1,0 +1,43 @@
+name: Probe latest MobileTina exact artwork run
+
+on:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-probe-latest-exact.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+      - name: Record latest exact artwork run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          json=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mobiletina-exact-original-artwork-verify.yml/runs?branch=agent%2Fmobiletina-2.0.15-base&per_page=1")
+          python3 - <<'PY' "$json" > /tmp/latest.txt
+          import json,sys
+          d=json.loads(sys.argv[1])['workflow_runs'][0]
+          print(f"Run ID: {d['id']}")
+          print(f"Status: {d['status']}")
+          print(f"Conclusion: {d.get('conclusion') or ''}")
+          print(f"Event: {d['event']}")
+          print(f"Head SHA: {d['head_sha']}")
+          print(f"URL: {d['html_url']}")
+          PY
+          mkdir -p .github/verification
+          cp /tmp/latest.txt .github/verification/mobiletina-latest-exact-run.txt
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add .github/verification/mobiletina-latest-exact-run.txt
+          git commit -m "Record latest exact artwork run"
+          git push origin HEAD:agent/mobiletina-2.0.15-base
