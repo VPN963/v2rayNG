@@ -1,0 +1,67 @@
+name: Fix MobileTina exact artwork guard and rebuild
+
+on:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-fix-exact-artwork-guard.yml
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  fix-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+
+      - name: Fix layout guard
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('.github/workflows/mobiletina-exact-original-artwork-verify.yml')
+          s = p.read_text(encoding='utf-8')
+          start_marker = '          def view(view_id):\n'
+          end_marker = '              return m.group(0)\n'
+          start = s.index(start_marker)
+          end = s.index(end_marker, start) + len(end_marker)
+          replacement = '''          def view(view_id):
+              marker = f'android:id="@+id/{view_id}"'
+              pos = s.find(marker)
+              if pos < 0:
+                  raise SystemExit(f'{view_id}: id not found')
+              start = s.rfind('<com.google.android.material.imageview.ShapeableImageView', 0, pos)
+              end = s.find('/>', pos)
+              if start < 0 or end < 0:
+                  raise SystemExit(f'{view_id}: ShapeableImageView not found')
+              return s[start:end + 2]
+'''
+          p.write_text(s[:start] + replacement + s[end:], encoding='utf-8')
+
+      - name: Commit fixed guard
+        run: |
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add .github/workflows/mobiletina-exact-original-artwork-verify.yml
+          git diff --cached --check
+          git commit -m "Fix exact artwork layout verification guard"
+          git push origin HEAD:agent/mobiletina-2.0.15-base
+
+      - name: Dispatch fixed ARMv7 build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail-with-body -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mobiletina-exact-original-artwork-verify.yml/dispatches \
+            -d '{"ref":"agent/mobiletina-2.0.15-base"}'
