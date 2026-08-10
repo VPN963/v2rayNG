@@ -1,0 +1,202 @@
+name: MobileTina HQ FAB verify
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-hq-fab-verify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout active branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply idempotent artwork rendering patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          p = Path('V2rayNG/app/src/main/res/layout/activity_main.xml')
+          s = p.read_text(encoding='utf-8')
+
+          def patch_view(xml: str, view_id: str, size: int) -> str:
+              # Convert only when the old Material FAB is still present.
+              old = re.compile(
+                  r'<com\.google\.android\.material\.floatingactionbutton\.FloatingActionButton\n'
+                  r'(?P<body>.*?android:id="@\+id/' + re.escape(view_id) + r'".*?)\n\s*/>',
+                  re.S,
+              )
+              m = old.search(xml)
+              if m:
+                  block = m.group(0).replace(
+                      '<com.google.android.material.floatingactionbutton.FloatingActionButton',
+                      '<com.google.android.material.imageview.ShapeableImageView', 1
+                  )
+                  block = re.sub(r'\n\s*app:backgroundTint="[^"]+"', '', block)
+                  block = re.sub(r'\n\s*app:fabCustomSize="[^"]+"', '', block)
+                  block = re.sub(r'\n\s*app:maxImageSize="[^"]+"', '', block)
+                  xml = xml[:m.start()] + block + xml[m.end():]
+
+              current = re.compile(
+                  r'<com\.google\.android\.material\.imageview\.ShapeableImageView\n'
+                  r'(?P<body>.*?android:id="@\+id/' + re.escape(view_id) + r'".*?)\n\s*/>',
+                  re.S,
+              )
+              m = current.search(xml)
+              if not m:
+                  raise SystemExit(f'{view_id}: expected artwork ImageView not found')
+              block = m.group(0)
+              block = re.sub(r'android:layout_width="\d+dp"', f'android:layout_width="{size}dp"', block, count=1)
+              block = re.sub(r'android:layout_height="\d+dp"', f'android:layout_height="{size}dp"', block, count=1)
+              if 'android:scaleType=' in block:
+                  block = re.sub(r'android:scaleType="[^"]+"', 'android:scaleType="fitCenter"', block, count=1)
+              else:
+                  block = block.replace('android:padding="0dp"', 'android:padding="0dp"\n                        android:scaleType="fitCenter"', 1)
+              if 'android:background=' not in block:
+                  block = block.replace('android:padding="0dp"', 'android:padding="0dp"\n                        android:background="@android:color/transparent"', 1)
+              if 'android:clickable=' not in block:
+                  block = block.replace('android:padding="0dp"', 'android:padding="0dp"\n                        android:clickable="true"\n                        android:focusable="true"', 1)
+              return xml[:m.start()] + block + xml[m.end():]
+
+          s = patch_view(s, 'fab_auto', 192)
+          s = patch_view(s, 'fab', 92)
+
+          # Manual dock geometry. Handle both old and already-patched states.
+          s = s.replace('android:layout_height="134dp"\n                    android:clipChildren="false"',
+                        'android:layout_height="174dp"\n                    android:clipChildren="false"', 1)
+          s = s.replace('android:layout_height="102dp"\n                        android:layout_gravity="bottom"',
+                        'android:layout_height="128dp"\n                        android:layout_gravity="bottom"', 1)
+          s = s.replace('android:layout_marginTop="62dp"', 'android:layout_marginTop="100dp"', 1)
+          s = s.replace('android:layout_marginTop="106dp"', 'android:layout_marginTop="144dp"', 1)
+
+          p.write_text(s, encoding='utf-8')
+
+          required = (
+              '@+id/fab_auto', '@+id/fab',
+              '@drawable/mt_auto_white', '@drawable/mt_manual_stop',
+              'android:layout_width="192dp"', 'android:layout_height="192dp"',
+              'android:layout_width="92dp"', 'android:layout_height="92dp"',
+              'android:layout_height="174dp"', 'android:layout_height="128dp"',
+              'android:layout_marginTop="100dp"', 'android:layout_marginTop="144dp"',
+          )
+          text = p.read_text(encoding='utf-8')
+          for item in required:
+              if item not in text:
+                  raise SystemExit(f'Regression guard failed: {item}')
+
+      - name: Check patch diff
+        run: |
+          git diff --check
+          git diff -- V2rayNG/app/src/main/res/layout/activity_main.xml
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3.2.0
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '13114758'
+          packages: 'platforms;android-36.1 build-tools;36.1.0 platform-tools'
+
+      - name: Install NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=0 --install "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('V2rayNG/app/build.gradle.kts')
+          text = path.read_text(encoding='utf-8')
+          marker = 'android {\n'
+          if marker not in text:
+              raise SystemExit('android block not found')
+          if 'ndkVersion = "28.2.13676358"' not in text:
+              text = text.replace(marker, marker + '    ndkVersion = "28.2.13676358"\n', 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Restore cached libhevtun
+        id: cache-libhevtun-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: mobiletina-2015-libhevtun-${{ runner.os }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Build libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        run: bash compile-hevtun.sh
+
+      - name: Save libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: mobiletina-2015-libhevtun-${{ runner.os }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Copy libhevtun
+        run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
+
+      - name: Fetch AndroidLibXrayLite tag
+        run: |
+          pushd AndroidLibXrayLite
+          CURRENT_TAG=$(git describe --tags --abbrev=0)
+          echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
+          popd
+
+      - name: Download original 2.0.15 libv2ray
+        uses: robinraju/release-downloader@v1.12
+        with:
+          repository: '2dust/AndroidLibXrayLite'
+          tag: ${{ env.CURRENT_TAG }}
+          fileName: 'libv2ray.aar'
+          out-file-path: V2rayNG/app/libs/
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build ARMv7
+        run: |
+          cd V2rayNG
+          echo "sdk.dir=${ANDROID_HOME}" > local.properties
+          chmod 755 gradlew
+          ./gradlew assemblePlaystoreDebug -PABI_FILTERS=armeabi-v7a
+
+      - name: Commit verified source and marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -- V2rayNG/app/build.gradle.kts
+          mkdir -p .github/verification
+          printf 'MobileTina HQ FAB patch verified by ARMv7 build\nWorkflow run: %s\nUTC: %s\n' \
+            "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > .github/verification/mobiletina-hq-fab-build-ok.txt
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add V2rayNG/app/src/main/res/layout/activity_main.xml .github/verification/mobiletina-hq-fab-build-ok.txt
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit.'
+          else
+            git commit -m "Verify direct-render MobileTina FAB patch"
+            git push origin HEAD:agent/mobiletina-2.0.15-base
+          fi
+
+      - name: Upload ARMv7 APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: MobileTina-2.0.15-base-armeabi-v7a-hq-fab-verified
+          path: V2rayNG/app/build/outputs/apk/playstore/debug/*armeabi-v7a*.apk
+          if-no-files-found: error
