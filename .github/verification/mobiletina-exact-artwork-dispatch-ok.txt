@@ -1,0 +1,4 @@
+MobileTina exact artwork workflow dispatch accepted
+Kick run: 31430519411
+Kick commit: 66131782cf97b11622674432cb2032892f7a7295
+UTC: 2026-08-10T20:45:00Z
