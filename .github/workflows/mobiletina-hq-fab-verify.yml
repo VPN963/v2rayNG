@@ -1,4 +1,4 @@
-name: MobileTina HQ artwork and ARMv7 verify
+name: MobileTina vector artwork and ARMv7 verify
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  hq-build-verify:
+  vector-build-verify:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,55 +23,77 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Preserve artwork at native density
+      - name: Generate crisp vector variants and remove compressed raster copies
         shell: python
         run: |
           from pathlib import Path
-          import struct
 
-          root = Path('V2rayNG/app/src/main/res')
-          target = root / 'drawable-nodpi'
-          target.mkdir(parents=True, exist_ok=True)
+          res = Path('V2rayNG/app/src/main/res')
+          drawable = res / 'drawable'
+          nodpi = res / 'drawable-nodpi'
+          blue_path = drawable / 'mt_auto_blue.xml'
+          manual_fab = drawable / 'mt_manual_fab.xml'
+          nav = drawable / 'mt_nav.xml'
 
-          stems = [
-              'mt_auto_white',
-              'mt_auto_yellow',
-              'mt_auto_blue',
-              'mt_auto_red',
-              'mt_manual_stop',
-              'mt_manual_fab',
-              'mt_nav',
+          for required in (blue_path, manual_fab, nav):
+              if not required.exists():
+                  raise SystemExit(f'Missing vector source: {required}')
+
+          blue = blue_path.read_text(encoding='utf-8')
+          if '#FF00D8FF' not in blue:
+              raise SystemExit('Blue vector master does not contain expected accent color')
+
+          variants = {
+              'mt_auto_white.xml': '#FFFFF0',
+              'mt_auto_yellow.xml': '#FFFFB000',
+              'mt_auto_red.xml': '#FFFF1530',
+          }
+          for filename, color in variants.items():
+              (drawable / filename).write_text(
+                  blue.replace('#FF00D8FF', color),
+                  encoding='utf-8',
+              )
+
+          # Manual disconnected state: keep the exact vectorized logo geometry,
+          # but use a neutral silver/white treatment matching the supplied artwork.
+          stop = blue.replace('android:width="192dp"', 'android:width="92dp"')
+          stop = stop.replace('android:height="192dp"', 'android:height="92dp"')
+          stop = stop.replace('#FF000000', '#FF626262')
+          stop = stop.replace('#FF00D8FF', '#FFF5F5F5')
+          (drawable / 'mt_manual_stop.xml').write_text(stop, encoding='utf-8')
+
+          # The old Build 82 resources were only a few KB each and visibly blurred.
+          # Remove them completely so Android cannot select a compressed raster
+          # instead of the vector resource on any density.
+          removed = []
+          if nodpi.exists():
+              for stem in (
+                  'mt_auto_white', 'mt_auto_yellow', 'mt_auto_blue', 'mt_auto_red',
+                  'mt_manual_stop', 'mt_manual_fab', 'mt_nav',
+              ):
+                  for old in nodpi.glob(stem + '.*'):
+                      old.unlink()
+                      removed.append(str(old))
+
+          vector_files = [
+              drawable / 'mt_auto_white.xml',
+              drawable / 'mt_auto_yellow.xml',
+              drawable / 'mt_auto_blue.xml',
+              drawable / 'mt_auto_red.xml',
+              drawable / 'mt_manual_stop.xml',
+              drawable / 'mt_manual_fab.xml',
+              drawable / 'mt_nav.xml',
           ]
-
-          report = []
-          for stem in stems:
-              matches = [
-                  p for p in root.rglob(stem + '.*')
-                  if p.is_file() and '/values' not in p.as_posix()
-              ]
-              if not matches:
-                  raise SystemExit(f'Missing artwork resource: {stem}')
-
-              # Keep the largest existing source byte-for-byte. This avoids
-              # accidentally selecting a previously downscaled density copy.
-              best = max(matches, key=lambda p: p.stat().st_size)
-              data = best.read_bytes()
-              suffix = best.suffix.lower()
-              destination = target / f'{stem}{suffix}'
-
-              for p in matches:
-                  if p.exists():
-                      p.unlink()
-              destination.write_bytes(data)
-
-              dims = 'unknown'
-              if suffix == '.png' and len(data) >= 24 and data[:8] == b'\x89PNG\r\n\x1a\n':
-                  width, height = struct.unpack('>II', data[16:24])
-                  dims = f'{width}x{height}'
-              report.append(f'{stem}: {destination} | {len(data)} bytes | {dims}')
+          for path in vector_files:
+              if not path.exists():
+                  raise SystemExit(f'Missing final vector resource: {path}')
 
           Path('.github/verification').mkdir(parents=True, exist_ok=True)
-          Path('.github/verification/mobiletina-artwork-report.txt').write_text(
+          report = ['MobileTina final artwork resources: VECTOR (density independent)']
+          report.extend(f'{p.name}: {p.stat().st_size} bytes' for p in vector_files)
+          report.append('Removed compressed raster resources:')
+          report.extend(removed or ['none'])
+          Path('.github/verification/mobiletina-vector-artwork-report.txt').write_text(
               '\n'.join(report) + '\n', encoding='utf-8'
           )
           print('\n'.join(report))
@@ -85,32 +107,37 @@ jobs:
           text = p.read_text(encoding='utf-8')
           required = (
               'com.google.android.material.imageview.ShapeableImageView',
-              '@+id/fab_auto',
-              '@+id/fab',
-              'android:layout_width="192dp"',
-              'android:layout_height="192dp"',
-              'android:layout_width="92dp"',
-              'android:layout_height="92dp"',
+              '@+id/fab_auto', '@+id/fab',
+              'android:layout_width="192dp"', 'android:layout_height="192dp"',
+              'android:layout_width="92dp"', 'android:layout_height="92dp"',
               'android:scaleType="fitCenter"',
-              'android:layout_height="50dp"',
-              'android:minHeight="50dp"',
-              'android:minWidth="156dp"',
-              'android:textSize="16sp"',
-              '@drawable/mt_auto_white',
-              '@drawable/mt_manual_stop',
+              'android:layout_height="50dp"', 'android:minHeight="50dp"',
+              'android:minWidth="156dp"', 'android:textSize="16sp"',
+              '@drawable/mt_auto_white', '@drawable/mt_manual_stop',
           )
           for item in required:
               if item not in text:
                   raise SystemExit(f'UI regression guard failed: {item}')
-
           if 'app:fabCustomSize=' in text or 'app:maxImageSize=' in text:
-              raise SystemExit('Legacy Material FAB image-size constraint is still present')
+              raise SystemExit('Legacy Material FAB icon constraints are still present')
+
+          res = Path('V2rayNG/app/src/main/res')
+          for stem in (
+              'mt_auto_white', 'mt_auto_yellow', 'mt_auto_blue', 'mt_auto_red',
+              'mt_manual_stop', 'mt_manual_fab', 'mt_nav',
+          ):
+              xml = res / 'drawable' / f'{stem}.xml'
+              if not xml.exists():
+                  raise SystemExit(f'Expected vector missing: {xml}')
+              raster = list((res / 'drawable-nodpi').glob(stem + '.*')) if (res / 'drawable-nodpi').exists() else []
+              if raster:
+                  raise SystemExit(f'Compressed raster copy still present for {stem}: {raster}')
 
       - name: Check source diff
         run: |
           git diff --check
           git status --short
-          cat .github/verification/mobiletina-artwork-report.txt
+          cat .github/verification/mobiletina-vector-artwork-report.txt
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3.2.0
@@ -184,28 +211,24 @@ jobs:
           chmod 755 gradlew
           ./gradlew assemblePlaystoreDebug -PABI_FILTERS=armeabi-v7a
 
-      - name: Commit verified artwork layout and build marker
+      - name: Commit vector artwork only after successful build
         shell: bash
         run: |
           set -euo pipefail
           git checkout -- V2rayNG/app/build.gradle.kts
-          printf 'MobileTina HQ artwork + enlarged controls verified by ARMv7 build\nWorkflow run: %s\nSource commit: %s\nUTC: %s\n' \
+          printf 'MobileTina vector artwork + enlarged controls verified by ARMv7 build\nWorkflow run: %s\nSource commit: %s\nUTC: %s\n' \
             "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            > .github/verification/mobiletina-hq-fab-build-ok.txt
+            > .github/verification/mobiletina-vector-build-ok.txt
           git config user.name "VPN963"
           git config user.email "120357728+VPN963@users.noreply.github.com"
           git add -A V2rayNG/app/src/main/res .github/verification
           git diff --cached --check
-          if git diff --cached --quiet; then
-            echo 'No source changes to commit.'
-          else
-            git commit -m "Verify HQ MobileTina artwork and enlarged controls"
-            git push origin HEAD:agent/mobiletina-2.0.15-base
-          fi
+          git commit -m "Replace compressed MobileTina artwork with crisp vectors"
+          git push origin HEAD:agent/mobiletina-2.0.15-base
 
       - name: Upload verified ARMv7 APK
         uses: actions/upload-artifact@v7
         with:
-          name: MobileTina-2.0.15-base-armeabi-v7a-hq-controls
+          name: MobileTina-2.0.15-base-armeabi-v7a-vector-artwork
           path: V2rayNG/app/build/outputs/apk/playstore/debug/*armeabi-v7a*.apk
           if-no-files-found: error
