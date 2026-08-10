@@ -1,4 +1,4 @@
-name: MobileTina HQ FAB verify
+name: MobileTina HQ artwork and ARMv7 verify
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  patch-build-verify:
+  hq-build-verify:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,84 +23,94 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply idempotent artwork rendering patch
+      - name: Preserve artwork at native density
         shell: python
         run: |
           from pathlib import Path
-          import re
+          import struct
+
+          root = Path('V2rayNG/app/src/main/res')
+          target = root / 'drawable-nodpi'
+          target.mkdir(parents=True, exist_ok=True)
+
+          stems = [
+              'mt_auto_white',
+              'mt_auto_yellow',
+              'mt_auto_blue',
+              'mt_auto_red',
+              'mt_manual_stop',
+              'mt_manual_fab',
+              'mt_nav',
+          ]
+
+          report = []
+          for stem in stems:
+              matches = [
+                  p for p in root.rglob(stem + '.*')
+                  if p.is_file() and '/values' not in p.as_posix()
+              ]
+              if not matches:
+                  raise SystemExit(f'Missing artwork resource: {stem}')
+
+              # Keep the largest existing source byte-for-byte. This avoids
+              # accidentally selecting a previously downscaled density copy.
+              best = max(matches, key=lambda p: p.stat().st_size)
+              data = best.read_bytes()
+              suffix = best.suffix.lower()
+              destination = target / f'{stem}{suffix}'
+
+              for p in matches:
+                  if p.exists():
+                      p.unlink()
+              destination.write_bytes(data)
+
+              dims = 'unknown'
+              if suffix == '.png' and len(data) >= 24 and data[:8] == b'\x89PNG\r\n\x1a\n':
+                  width, height = struct.unpack('>II', data[16:24])
+                  dims = f'{width}x{height}'
+              report.append(f'{stem}: {destination} | {len(data)} bytes | {dims}')
+
+          Path('.github/verification').mkdir(parents=True, exist_ok=True)
+          Path('.github/verification/mobiletina-artwork-report.txt').write_text(
+              '\n'.join(report) + '\n', encoding='utf-8'
+          )
+          print('\n'.join(report))
+
+      - name: Verify direct-render UI geometry
+        shell: python
+        run: |
+          from pathlib import Path
 
           p = Path('V2rayNG/app/src/main/res/layout/activity_main.xml')
-          s = p.read_text(encoding='utf-8')
-
-          def patch_view(xml: str, view_id: str, size: int) -> str:
-              # Convert only when the old Material FAB is still present.
-              old = re.compile(
-                  r'<com\.google\.android\.material\.floatingactionbutton\.FloatingActionButton\n'
-                  r'(?P<body>.*?android:id="@\+id/' + re.escape(view_id) + r'".*?)\n\s*/>',
-                  re.S,
-              )
-              m = old.search(xml)
-              if m:
-                  block = m.group(0).replace(
-                      '<com.google.android.material.floatingactionbutton.FloatingActionButton',
-                      '<com.google.android.material.imageview.ShapeableImageView', 1
-                  )
-                  block = re.sub(r'\n\s*app:backgroundTint="[^"]+"', '', block)
-                  block = re.sub(r'\n\s*app:fabCustomSize="[^"]+"', '', block)
-                  block = re.sub(r'\n\s*app:maxImageSize="[^"]+"', '', block)
-                  xml = xml[:m.start()] + block + xml[m.end():]
-
-              current = re.compile(
-                  r'<com\.google\.android\.material\.imageview\.ShapeableImageView\n'
-                  r'(?P<body>.*?android:id="@\+id/' + re.escape(view_id) + r'".*?)\n\s*/>',
-                  re.S,
-              )
-              m = current.search(xml)
-              if not m:
-                  raise SystemExit(f'{view_id}: expected artwork ImageView not found')
-              block = m.group(0)
-              block = re.sub(r'android:layout_width="\d+dp"', f'android:layout_width="{size}dp"', block, count=1)
-              block = re.sub(r'android:layout_height="\d+dp"', f'android:layout_height="{size}dp"', block, count=1)
-              if 'android:scaleType=' in block:
-                  block = re.sub(r'android:scaleType="[^"]+"', 'android:scaleType="fitCenter"', block, count=1)
-              else:
-                  block = block.replace('android:padding="0dp"', 'android:padding="0dp"\n                        android:scaleType="fitCenter"', 1)
-              if 'android:background=' not in block:
-                  block = block.replace('android:padding="0dp"', 'android:padding="0dp"\n                        android:background="@android:color/transparent"', 1)
-              if 'android:clickable=' not in block:
-                  block = block.replace('android:padding="0dp"', 'android:padding="0dp"\n                        android:clickable="true"\n                        android:focusable="true"', 1)
-              return xml[:m.start()] + block + xml[m.end():]
-
-          s = patch_view(s, 'fab_auto', 192)
-          s = patch_view(s, 'fab', 92)
-
-          # Manual dock geometry. Handle both old and already-patched states.
-          s = s.replace('android:layout_height="134dp"\n                    android:clipChildren="false"',
-                        'android:layout_height="174dp"\n                    android:clipChildren="false"', 1)
-          s = s.replace('android:layout_height="102dp"\n                        android:layout_gravity="bottom"',
-                        'android:layout_height="128dp"\n                        android:layout_gravity="bottom"', 1)
-          s = s.replace('android:layout_marginTop="62dp"', 'android:layout_marginTop="100dp"', 1)
-          s = s.replace('android:layout_marginTop="106dp"', 'android:layout_marginTop="144dp"', 1)
-
-          p.write_text(s, encoding='utf-8')
-
-          required = (
-              '@+id/fab_auto', '@+id/fab',
-              '@drawable/mt_auto_white', '@drawable/mt_manual_stop',
-              'android:layout_width="192dp"', 'android:layout_height="192dp"',
-              'android:layout_width="92dp"', 'android:layout_height="92dp"',
-              'android:layout_height="174dp"', 'android:layout_height="128dp"',
-              'android:layout_marginTop="100dp"', 'android:layout_marginTop="144dp"',
-          )
           text = p.read_text(encoding='utf-8')
+          required = (
+              'com.google.android.material.imageview.ShapeableImageView',
+              '@+id/fab_auto',
+              '@+id/fab',
+              'android:layout_width="192dp"',
+              'android:layout_height="192dp"',
+              'android:layout_width="92dp"',
+              'android:layout_height="92dp"',
+              'android:scaleType="fitCenter"',
+              'android:layout_height="50dp"',
+              'android:minHeight="50dp"',
+              'android:minWidth="156dp"',
+              'android:textSize="16sp"',
+              '@drawable/mt_auto_white',
+              '@drawable/mt_manual_stop',
+          )
           for item in required:
               if item not in text:
-                  raise SystemExit(f'Regression guard failed: {item}')
+                  raise SystemExit(f'UI regression guard failed: {item}')
 
-      - name: Check patch diff
+          if 'app:fabCustomSize=' in text or 'app:maxImageSize=' in text:
+              raise SystemExit('Legacy Material FAB image-size constraint is still present')
+
+      - name: Check source diff
         run: |
           git diff --check
-          git diff -- V2rayNG/app/src/main/res/layout/activity_main.xml
+          git status --short
+          cat .github/verification/mobiletina-artwork-report.txt
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3.2.0
@@ -167,36 +177,35 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Build ARMv7
+      - name: Build ARMv7 APK
         run: |
           cd V2rayNG
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
           chmod 755 gradlew
           ./gradlew assemblePlaystoreDebug -PABI_FILTERS=armeabi-v7a
 
-      - name: Commit verified source and marker
+      - name: Commit verified artwork layout and build marker
         shell: bash
         run: |
           set -euo pipefail
           git checkout -- V2rayNG/app/build.gradle.kts
-          mkdir -p .github/verification
-          printf 'MobileTina HQ FAB patch verified by ARMv7 build\nWorkflow run: %s\nUTC: %s\n' \
-            "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          printf 'MobileTina HQ artwork + enlarged controls verified by ARMv7 build\nWorkflow run: %s\nSource commit: %s\nUTC: %s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             > .github/verification/mobiletina-hq-fab-build-ok.txt
           git config user.name "VPN963"
           git config user.email "120357728+VPN963@users.noreply.github.com"
-          git add V2rayNG/app/src/main/res/layout/activity_main.xml .github/verification/mobiletina-hq-fab-build-ok.txt
+          git add -A V2rayNG/app/src/main/res .github/verification
           git diff --cached --check
           if git diff --cached --quiet; then
-            echo 'Nothing to commit.'
+            echo 'No source changes to commit.'
           else
-            git commit -m "Verify direct-render MobileTina FAB patch"
+            git commit -m "Verify HQ MobileTina artwork and enlarged controls"
             git push origin HEAD:agent/mobiletina-2.0.15-base
           fi
 
-      - name: Upload ARMv7 APK
+      - name: Upload verified ARMv7 APK
         uses: actions/upload-artifact@v7
         with:
-          name: MobileTina-2.0.15-base-armeabi-v7a-hq-fab-verified
+          name: MobileTina-2.0.15-base-armeabi-v7a-hq-controls
           path: V2rayNG/app/build/outputs/apk/playstore/debug/*armeabi-v7a*.apk
           if-no-files-found: error
