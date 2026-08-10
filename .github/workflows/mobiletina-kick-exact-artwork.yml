@@ -9,12 +9,18 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
 
 jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+
       - name: Dispatch exact artwork verification workflow
         env:
           GH_TOKEN: ${{ github.token }}
@@ -26,3 +32,20 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/mobiletina-exact-original-artwork-verify.yml/dispatches \
             -d '{"ref":"agent/mobiletina-2.0.15-base"}'
+
+      - name: Commit dispatch success marker
+        run: |
+          mkdir -p .github/verification
+          {
+            echo 'MobileTina exact artwork workflow dispatch accepted'
+            echo "Kick run: $GITHUB_RUN_ID"
+            echo "Kick commit: $GITHUB_SHA"
+            echo "UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > .github/verification/mobiletina-exact-artwork-dispatch-ok.txt
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add .github/verification/mobiletina-exact-artwork-dispatch-ok.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Confirm exact artwork workflow dispatch"
+            git push origin HEAD:agent/mobiletina-2.0.15-base
+          fi
