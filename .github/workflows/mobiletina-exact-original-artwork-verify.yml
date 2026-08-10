@@ -24,17 +24,13 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Require exact Photo.zip
+      - name: Restore exact user artwork without conversion
         shell: bash
         run: |
           set -euo pipefail
           test -f .github/staging/Photo.zip
           echo '154d8204f0a3b4db792387fbd8d0c78f07038a84ca2a2f69d04e5767e87e6467  .github/staging/Photo.zip' | sha256sum -c -
 
-      - name: Restore exact user artwork without conversion
-        shell: bash
-        run: |
-          set -euo pipefail
           rm -rf /tmp/mobiletina-artwork
           mkdir -p /tmp/mobiletina-artwork
           unzip -j .github/staging/Photo.zip -d /tmp/mobiletina-artwork
@@ -48,7 +44,6 @@ jobs:
           echo '14a34d2485c19090f29e74547a126a59180014659dc045fa7594ad62434e8e89  /tmp/mobiletina-artwork/blue.png' | sha256sum -c -
 
           mkdir -p V2rayNG/app/src/main/res/drawable-nodpi
-
           rm -f V2rayNG/app/src/main/res/drawable/mt_auto_white.xml
           rm -f V2rayNG/app/src/main/res/drawable/mt_auto_yellow.xml
           rm -f V2rayNG/app/src/main/res/drawable/mt_auto_blue.xml
@@ -56,7 +51,6 @@ jobs:
           rm -f V2rayNG/app/src/main/res/drawable/mt_manual_stop.xml
           rm -f V2rayNG/app/src/main/res/drawable/mt_manual_fab.xml
           rm -f V2rayNG/app/src/main/res/drawable/mt_nav.xml
-
           rm -f V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_white.*
           rm -f V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_yellow.*
           rm -f V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_blue.*
@@ -81,28 +75,26 @@ jobs:
           echo 'a4dee906b06e9f0833b35efa77182ac8d567a3e9d0ab335ffe4c70e7aa261026  V2rayNG/app/src/main/res/drawable-nodpi/mt_manual_fab.webp' | sha256sum -c -
           echo 'f33b9e6d04c2f6ec344c917f3a2412075c8f62af841b444ffa7a864099e395f7  V2rayNG/app/src/main/res/drawable-nodpi/mt_nav.png' | sha256sum -c -
 
-      - name: Verify neat direct-render layout
+      - name: Verify direct-render layout
         shell: python
         run: |
           from pathlib import Path
-          import re
 
-          p = Path('V2rayNG/app/src/main/res/layout/activity_main.xml')
-          s = p.read_text(encoding='utf-8')
+          s = Path('V2rayNG/app/src/main/res/layout/activity_main.xml').read_text(encoding='utf-8')
 
-          def view(view_id):
-              pattern = re.compile(
-                  r'<com\.google\.android\.material\.imageview\.ShapeableImageView\n'
-                  r'(?P<body>.*?android:id="@\+id/' + re.escape(view_id) + r'".*?)\n\s*/>',
-                  re.S,
-              )
-              m = pattern.search(s)
-              if not m:
+          def block(view_id):
+              marker = f'android:id="@+id/{view_id}"'
+              pos = s.find(marker)
+              if pos < 0:
+                  raise SystemExit(f'{view_id}: id not found')
+              start = s.rfind('<com.google.android.material.imageview.ShapeableImageView', 0, pos)
+              end = s.find('/>', pos)
+              if start < 0 or end < 0:
                   raise SystemExit(f'{view_id}: ShapeableImageView not found')
-              return m.group(0)
+              return s[start:end + 2]
 
-          auto = view('fab_auto')
-          manual = view('fab')
+          auto = block('fab_auto')
+          manual = block('fab')
 
           for item in (
               'android:layout_width="208dp"',
@@ -130,15 +122,25 @@ jobs:
           if 'tint=' in manual or 'backgroundTint=' in manual:
               raise SystemExit('Manual artwork must not be tinted')
 
-          if 'android:layout_height="50dp"' not in s:
-              raise SystemExit('Auto-connect button 50dp guard failed')
+          if 'android:id="@+id/btn_smart_connect"' not in s or 'android:layout_height="50dp"' not in s:
+              raise SystemExit('Auto-connect button guard failed')
 
           nav = Path('V2rayNG/app/src/main/res/layout/nav_header.xml').read_text(encoding='utf-8')
           if 'android:scaleType="fitCenter"' not in nav or '@drawable/mt_nav' not in nav:
               raise SystemExit('Drawer artwork guard failed')
 
-      - name: Check source diff
-        run: git diff --check
+      - name: Commit exact artwork source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add -A V2rayNG/app/src/main/res/drawable V2rayNG/app/src/main/res/drawable-nodpi
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m "Restore exact original MobileTina artwork"
+            git push origin HEAD:agent/mobiletina-2.0.15-base
+          fi
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3.2.0
@@ -159,8 +161,7 @@ jobs:
           if marker not in text:
               raise SystemExit('android block not found')
           if 'ndkVersion = "28.2.13676358"' not in text:
-              text = text.replace(marker, marker + '    ndkVersion = "28.2.13676358"\n', 1)
-              path.write_text(text, encoding='utf-8')
+              path.write_text(text.replace(marker, marker + '    ndkVersion = "28.2.13676358"\n', 1), encoding='utf-8')
           PY
 
       - name: Restore cached libhevtun
@@ -212,7 +213,7 @@ jobs:
           chmod 755 gradlew
           ./gradlew assemblePlaystoreDebug -PABI_FILTERS=armeabi-v7a
 
-      - name: Commit exact artwork after successful ARMv7 build
+      - name: Commit successful build marker
         shell: bash
         run: |
           set -euo pipefail
@@ -226,13 +227,12 @@ jobs:
             echo 'Auto FAB: 208dp; Manual FAB: 92dp; Auto-connect button: 50dp'
             echo 'Artwork source: exact Photo.zip SHA-256 154d8204f0a3b4db792387fbd8d0c78f07038a84ca2a2f69d04e5767e87e6467'
           } > .github/verification/mobiletina-exact-original-artwork-build-ok.txt
-
           git config user.name "VPN963"
           git config user.email "120357728+VPN963@users.noreply.github.com"
-          git add -A V2rayNG/app/src/main/res/drawable V2rayNG/app/src/main/res/drawable-nodpi .github/verification/mobiletina-exact-original-artwork-build-ok.txt
+          git add .github/verification/mobiletina-exact-original-artwork-build-ok.txt
           git diff --cached --check
           if ! git diff --cached --quiet; then
-            git commit -m "Restore exact original MobileTina artwork"
+            git commit -m "Verify exact original MobileTina artwork ARMv7 build"
             git push origin HEAD:agent/mobiletina-2.0.15-base
           fi
 
