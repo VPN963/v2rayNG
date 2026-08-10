@@ -1,6 +1,7 @@
-name: MobileTina HQ artwork
+name: MobileTina HQ FAB direct-render patch
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - agent/mobiletina-2.0.15-base
@@ -11,85 +12,192 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  apply-build-commit:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout MobileTina branch
+        uses: actions/checkout@v6
         with:
           ref: agent/mobiletina-2.0.15-base
+          submodules: recursive
           fetch-depth: 0
 
-      - name: Restore original uploaded artwork without recompression
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/mobiletina_hq
-          base64 -d .github/hq/Photo.zip.b64 > /tmp/Photo.zip
-          unzip -q -o /tmp/Photo.zip -d /tmp/mobiletina_hq
-
-          RES=V2rayNG/app/src/main/res/drawable-nodpi
-          mkdir -p "$RES"
-
-          # Remove the previously aggressively-compressed WebP variants.
-          rm -f "$RES/mt_auto_white.webp" \
-                "$RES/mt_auto_yellow.webp" \
-                "$RES/mt_auto_blue.webp" \
-                "$RES/mt_auto_red.webp" \
-                "$RES/mt_nav.webp"
-
-          # Copy the exact original high-resolution files supplied by the user.
-          cp /tmp/mobiletina_hq/white.png  "$RES/mt_auto_white.png"
-          cp /tmp/mobiletina_hq/yellow.png "$RES/mt_auto_yellow.png"
-          cp /tmp/mobiletina_hq/blue.png   "$RES/mt_auto_blue.png"
-          cp /tmp/mobiletina_hq/red.png    "$RES/mt_auto_red.png"
-          cp /tmp/mobiletina_hq/nav.png    "$RES/mt_nav.png"
-          cp /tmp/mobiletina_hq/stop.webp  "$RES/mt_manual_stop.webp"
-          cp /tmp/mobiletina_hq/fab.webp   "$RES/mt_manual_fab.webp"
-
-          # Verify originals were not altered.
-          test "$(stat -c%s "$RES/mt_auto_white.png")"  -eq 78322
-          test "$(stat -c%s "$RES/mt_auto_yellow.png")" -eq 110665
-          test "$(stat -c%s "$RES/mt_auto_blue.png")"   -eq 97925
-          test "$(stat -c%s "$RES/mt_auto_red.png")"    -eq 87264
-          test "$(stat -c%s "$RES/mt_nav.png")"         -eq 31295
-          test "$(stat -c%s "$RES/mt_manual_stop.webp")" -eq 20250
-          test "$(stat -c%s "$RES/mt_manual_fab.webp")"  -eq 28332
-
-      - name: Enlarge both FABs and preserve dock spacing
+      - name: Patch FAB rendering and layout
         shell: python
         run: |
           from pathlib import Path
+          import re
+
           p = Path('V2rayNG/app/src/main/res/layout/activity_main.xml')
-          s = p.read_text()
+          s = p.read_text(encoding='utf-8')
+          original = s
 
-          # Auto FAB: 172 -> 188 dp, full-resolution artwork fills the circular button.
-          s = s.replace('android:layout_width="172dp"\n                        android:layout_height="172dp"',
-                        'android:layout_width="188dp"\n                        android:layout_height="188dp"', 1)
-          s = s.replace('app:fabCustomSize="172dp"\n                        app:maxImageSize="172dp"',
-                        'app:fabCustomSize="188dp"\n                        app:maxImageSize="188dp"', 1)
+          def replace_widget(xml, view_id, width, height):
+              pattern = re.compile(
+                  r'<com\.google\.android\.material\.floatingactionbutton\.FloatingActionButton\n'
+                  r'(?P<body>.*?android:id="@\+id/' + re.escape(view_id) + r'".*?)\n\s*/>',
+                  re.S,
+              )
+              m = pattern.search(xml)
+              if not m:
+                  raise SystemExit(f'{view_id}: FloatingActionButton block not found')
+              block = m.group(0)
+              block = block.replace(
+                  '<com.google.android.material.floatingactionbutton.FloatingActionButton',
+                  '<com.google.android.material.imageview.ShapeableImageView',
+                  1,
+              )
+              block = re.sub(r'android:layout_width="\d+dp"', f'android:layout_width="{width}dp"', block, count=1)
+              block = re.sub(r'android:layout_height="\d+dp"', f'android:layout_height="{height}dp"', block, count=1)
+              block = re.sub(r'android:scaleType="[^"]+"', 'android:scaleType="fitCenter"', block, count=1)
+              block = re.sub(r'\n\s*app:backgroundTint="[^"]+"', '', block)
+              block = re.sub(r'\n\s*app:fabCustomSize="[^"]+"', '', block)
+              block = re.sub(r'\n\s*app:maxImageSize="[^"]+"', '', block)
+              if 'android:background=' not in block:
+                  block = block.replace(
+                      'android:padding="0dp"',
+                      'android:padding="0dp"\n                        android:background="@android:color/transparent"',
+                      1,
+                  )
+              if 'android:clickable=' not in block:
+                  block = block.replace(
+                      'android:padding="0dp"',
+                      'android:padding="0dp"\n                        android:clickable="true"\n                        android:focusable="true"',
+                      1,
+                  )
+              return xml[:m.start()] + block + xml[m.end():]
 
-          # Manual dock: enlarge 58 -> 68 dp while maintaining clean gaps.
-          s = s.replace('android:layout_height="134dp"\n                    android:clipChildren="false"',
-                        'android:layout_height="148dp"\n                    android:clipChildren="false"', 1)
-          s = s.replace('android:layout_height="102dp"\n                        android:layout_gravity="bottom"',
-                        'android:layout_height="114dp"\n                        android:layout_gravity="bottom"', 1)
-          s = s.replace('android:layout_width="58dp"\n                        android:layout_height="58dp"',
-                        'android:layout_width="68dp"\n                        android:layout_height="68dp"', 1)
-          s = s.replace('app:fabCustomSize="58dp"\n                        app:maxImageSize="58dp"',
-                        'app:fabCustomSize="68dp"\n                        app:maxImageSize="68dp"', 1)
-          s = s.replace('android:layout_marginTop="62dp"', 'android:layout_marginTop="72dp"', 1)
-          s = s.replace('android:layout_marginTop="106dp"', 'android:layout_marginTop="118dp"', 1)
+          # Render the artwork as an image, not as a Material FAB icon.
+          # This removes FAB icon-size interpolation/inset while preserving the same IDs and click logic.
+          s = replace_widget(s, 'fab_auto', 192, 192)
+          s = replace_widget(s, 'fab', 92, 92)
 
-          p.write_text(s)
+          # Increase the manual dock only as much as needed to preserve clean gaps.
+          replacements = [
+              ('android:layout_height="134dp"\n                    android:clipChildren="false"',
+               'android:layout_height="174dp"\n                    android:clipChildren="false"'),
+              ('android:layout_height="102dp"\n                        android:layout_gravity="bottom"',
+               'android:layout_height="128dp"\n                        android:layout_gravity="bottom"'),
+              ('android:layout_marginTop="62dp"', 'android:layout_marginTop="100dp"'),
+              ('android:layout_marginTop="106dp"', 'android:layout_marginTop="144dp"'),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'Expected layout fragment not found: {old!r}')
+              s = s.replace(old, new, 1)
 
-      - name: Validate and commit
+          if s == original:
+              raise SystemExit('No layout changes produced')
+
+          p.write_text(s, encoding='utf-8')
+
+          # Regression guards: IDs and state resources must remain intact.
+          text = p.read_text(encoding='utf-8')
+          for required in (
+              '@+id/fab_auto', '@+id/fab', '@drawable/mt_auto_white', '@drawable/mt_manual_stop',
+              'android:layout_width="192dp"', 'android:layout_width="92dp"',
+          ):
+              if required not in text:
+                  raise SystemExit(f'Missing regression guard: {required}')
+
+      - name: Validate XML patch
         shell: bash
         run: |
           set -euo pipefail
+          git diff --check
+          git diff -- V2rayNG/app/src/main/res/layout/activity_main.xml
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3.2.0
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '13114758'
+          packages: 'platforms;android-36.1 build-tools;36.1.0 platform-tools'
+
+      - name: Install NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            --channel=0 \
+            --install "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('V2rayNG/app/build.gradle.kts')
+          text = path.read_text(encoding='utf-8')
+          marker = 'android {\n'
+          if marker not in text:
+              raise SystemExit('android block not found')
+          if 'ndkVersion = "28.2.13676358"' not in text:
+              text = text.replace(marker, marker + '    ndkVersion = "28.2.13676358"\n', 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Restore cached libhevtun
+        id: cache-libhevtun-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: mobiletina-2015-libhevtun-${{ runner.os }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Build libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        run: bash compile-hevtun.sh
+
+      - name: Save libhevtun
+        if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/libs
+          key: mobiletina-2015-libhevtun-${{ runner.os }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+
+      - name: Copy libhevtun
+        run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
+
+      - name: Fetch AndroidLibXrayLite tag
+        run: |
+          pushd AndroidLibXrayLite
+          CURRENT_TAG=$(git describe --tags --abbrev=0)
+          echo "Using AndroidLibXrayLite tag: $CURRENT_TAG"
+          echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
+          popd
+
+      - name: Download original 2.0.15 libv2ray
+        uses: robinraju/release-downloader@v1.12
+        with:
+          repository: '2dust/AndroidLibXrayLite'
+          tag: ${{ env.CURRENT_TAG }}
+          fileName: 'libv2ray.aar'
+          out-file-path: V2rayNG/app/libs/
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build patched MobileTina ARMv7 APK
+        run: |
+          cd V2rayNG
+          echo "sdk.dir=${ANDROID_HOME}" > local.properties
+          chmod 755 gradlew
+          ./gradlew assemblePlaystoreDebug -PABI_FILTERS=armeabi-v7a
+
+      - name: Commit patch only after successful build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -- V2rayNG/app/build.gradle.kts
           git config user.name "VPN963"
           git config user.email "120357728+VPN963@users.noreply.github.com"
-          git add V2rayNG/app/src/main/res/drawable-nodpi \
-                  V2rayNG/app/src/main/res/layout/activity_main.xml
+          git add V2rayNG/app/src/main/res/layout/activity_main.xml
           git diff --cached --check
-          git commit -m "Restore original HQ artwork and enlarge FABs"
+          git commit -m "Render MobileTina artwork directly and enlarge FABs"
           git push origin HEAD:agent/mobiletina-2.0.15-base
+
+      - name: Upload verified ARMv7 APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: MobileTina-2.0.15-base-armeabi-v7a-hq-fab
+          path: V2rayNG/app/build/outputs/apk/playstore/debug/*armeabi-v7a*.apk
+          if-no-files-found: error
