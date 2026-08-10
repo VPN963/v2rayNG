@@ -1,0 +1,75 @@
+name: Inspect original MobileTina artwork source
+
+on:
+  push:
+    branches:
+      - agent/mobiletina-2.0.15-base
+    paths:
+      - .github/workflows/mobiletina-inspect-original-artwork.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout active branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/mobiletina-2.0.15-base
+          fetch-depth: 0
+
+      - name: Inspect archived source bytes
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64, hashlib, io, zipfile
+
+          out = []
+          expected_stop = '9c785413bec4f4e707e69decfeaa387e1c4d6268f40a1ad357c135770b763abc'
+
+          p = Path('.github/hq/mt_manual_stop.b64')
+          if p.exists():
+              data = base64.b64decode(''.join(p.read_text().split()))
+              sha = hashlib.sha256(data).hexdigest()
+              out += [f'mt_manual_stop bytes={len(data)} sha256={sha}', f'mt_manual_stop_matches_current={sha == expected_stop}']
+          else:
+              out.append('mt_manual_stop.b64 missing')
+
+          p = Path('.github/hq/Photo.zip.b64')
+          if p.exists():
+              text = ''.join(p.read_text().split())
+              try:
+                  data = base64.b64decode(text, validate=True)
+                  out += [f'Photo decoded bytes={len(data)} sha256={hashlib.sha256(data).hexdigest()}', f'Photo magic={data[:16].hex()}']
+                  try:
+                      z = zipfile.ZipFile(io.BytesIO(data))
+                      out.append('Photo is_zip=True')
+                      for info in z.infolist():
+                          if info.is_dir():
+                              continue
+                          b = z.read(info.filename)
+                          out.append(f'ZIP {info.filename} bytes={len(b)} sha256={hashlib.sha256(b).hexdigest()}')
+                  except Exception as e:
+                      out.append(f'Photo is_zip=False error={type(e).__name__}: {e}')
+              except Exception as e:
+                  out.append(f'Photo base64_decode_error={type(e).__name__}: {e}')
+          else:
+              out.append('Photo.zip.b64 missing')
+
+          Path('.github/verification').mkdir(parents=True, exist_ok=True)
+          Path('.github/verification/mobiletina-original-artwork-inspection.txt').write_text('\n'.join(out) + '\n')
+          print('\n'.join(out))
+
+      - name: Commit inspection report
+        run: |
+          set -euo pipefail
+          git config user.name "VPN963"
+          git config user.email "120357728+VPN963@users.noreply.github.com"
+          git add .github/verification/mobiletina-original-artwork-inspection.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Inspect archived original MobileTina artwork"
+            git push origin HEAD:agent/mobiletina-2.0.15-base
+          fi
