@@ -1,0 +1,7 @@
+mt_auto_white: V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_white.webp | 6358 bytes | unknown
+mt_auto_yellow: V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_yellow.webp | 5862 bytes | unknown
+mt_auto_blue: V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_blue.webp | 3638 bytes | unknown
+mt_auto_red: V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_red.webp | 3420 bytes | unknown
+mt_manual_stop: V2rayNG/app/src/main/res/drawable-nodpi/mt_manual_stop.webp | 4204 bytes | unknown
+mt_manual_fab: V2rayNG/app/src/main/res/drawable-nodpi/mt_manual_fab.webp | 5276 bytes | unknown
+mt_nav: V2rayNG/app/src/main/res/drawable-nodpi/mt_nav.webp | 3614 bytes | unknown

@@ -1,0 +1,4 @@
+MobileTina HQ artwork + enlarged controls verified by ARMv7 build
+Workflow run: 31418758678
+Source commit: ceae47dc550357130f75398c2c03eb4d1bfca470
+UTC: 2026-08-10T18:26:13Z
