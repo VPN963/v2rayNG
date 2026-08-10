@@ -1,0 +1,4 @@
+MobileTina vector artwork + enlarged controls verified by ARMv7 build
+Workflow run: 31419978461
+Source commit: 7d14f892be5011d3f7cb4b81308421ba710eeafc
+UTC: 2026-08-10T18:40:01Z

@@ -1,0 +1,16 @@
+MobileTina final artwork resources: VECTOR (density independent)
+mt_auto_white.xml: 9044 bytes
+mt_auto_yellow.xml: 9052 bytes
+mt_auto_blue.xml: 9052 bytes
+mt_auto_red.xml: 9052 bytes
+mt_manual_stop.xml: 9050 bytes
+mt_manual_fab.xml: 7329 bytes
+mt_nav.xml: 18753 bytes
+Removed compressed raster resources:
+V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_white.webp
+V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_yellow.webp
+V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_blue.webp
+V2rayNG/app/src/main/res/drawable-nodpi/mt_auto_red.webp
+V2rayNG/app/src/main/res/drawable-nodpi/mt_manual_stop.webp
+V2rayNG/app/src/main/res/drawable-nodpi/mt_manual_fab.webp
+V2rayNG/app/src/main/res/drawable-nodpi/mt_nav.webp
