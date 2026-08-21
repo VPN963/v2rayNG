@@ -9,6 +9,9 @@ on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - ci/samsung-validation-20260821
 
 permissions:
   contents: write
