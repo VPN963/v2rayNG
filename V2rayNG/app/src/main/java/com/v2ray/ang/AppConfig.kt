@@ -10,9 +10,6 @@ object AppConfig {
     /** Directory names used in the app's file system. */
     const val DIR_ASSETS = "assets"
 
-    const val WEBDAV_BACKUP_DIR = "backups"
-    const val WEBDAV_BACKUP_FILE_NAME = "backup_ng.zip"
-
     /** Legacy configuration keys. */
     const val ANG_CONFIG = "ang_config"
 
@@ -84,6 +81,9 @@ object AppConfig {
 
     /** Cache keys. */
     const val CACHE_SUBSCRIPTION_ID = "cache_subscription_id"
+    const val CACHE_SERVICE_RUNNING = "cache_service_running"
+    const val CACHE_SERVICE_STOP_REQUEST = "cache_service_stop_request"
+    const val CACHE_SERVICE_STOP_COMPLETED = "cache_service_stop_completed"
 
     /** Protocol identifiers. */
     const val PROTOCOL_FREEDOM = "freedom"
@@ -176,7 +176,7 @@ object AppConfig {
 
     /** Notification channel IDs and names. */
     const val RAY_NG_CHANNEL_ID = "RAY_NG_M_CH_ID"
-    const val RAY_NG_CHANNEL_NAME = "v2rayNG Background Service"
+    const val RAY_NG_CHANNEL_NAME = "فیلترشکن"
 
     /** Protocols Scheme **/
     const val VMESS = "vmess://"

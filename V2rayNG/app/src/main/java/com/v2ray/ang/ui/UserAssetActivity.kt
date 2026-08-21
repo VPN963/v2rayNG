@@ -220,12 +220,12 @@ class UserAssetActivity : HelperBaseActivity() {
             val file = extDir.listFiles()?.find { it.name == asset.assetUrl.remarks }
 
             AlertDialog.Builder(ownerActivity).setMessage(R.string.del_config_comfirm)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
+                .setPositiveButton(R.string.mobiletina_confirm) { _, _ ->
                     file?.delete()
                     MmkvManager.removeAssetUrl(guid)
                     initAssets()
                 }
-                .setNegativeButton(android.R.string.cancel) { _, _ ->
+                .setNegativeButton(R.string.mobiletina_cancel) { _, _ ->
                     // do nothing
                 }
                 .show()

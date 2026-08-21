@@ -21,9 +21,9 @@ import com.v2ray.ang.dto.entities.SubscriptionCache
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.matchesPattern
 import com.v2ray.ang.extension.toastError
-import com.v2ray.ang.extension.toastSuccess
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.MobileTinaSubscriptionMarkerManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.MessageUtil
@@ -39,7 +39,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var subscriptionId: String = MmkvManager.decodeSettingsString(AppConfig.CACHE_SUBSCRIPTION_ID, "").orEmpty()
     var keywordFilter = ""
     val serversCache = mutableListOf<ServersCache>()
-    val isRunning by lazy { MutableLiveData<Boolean>() }
+    val isRunning by lazy {
+        MutableLiveData(MmkvManager.decodeSettingsBool(AppConfig.CACHE_SERVICE_RUNNING, false))
+    }
     val updateListAction by lazy { MutableLiveData<Int>() }
     val updateTestResultAction by lazy { MutableLiveData<String>() }
 
@@ -48,7 +50,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * `registerReceiver(Context, BroadcastReceiver, IntentFilter, int)`.
      */
     fun startListenBroadcast() {
-        isRunning.value = false
         val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY)
         ContextCompat.registerReceiver(getApplication(), mMsgReceiver, mFilter, Utils.receiverFlags())
         MessageUtil.sendMsg2Service(getApplication(), AppConfig.MSG_REGISTER_CLIENT, "")
@@ -148,7 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return AngConfigManager.updateConfigViaSubAll()
         } else {
             val subItem = MmkvManager.decodeSubscription(subscriptionId) ?: return SubscriptionUpdateResult()
-            return AngConfigManager.updateConfigViaSub(SubscriptionCache(subscriptionId, subItem))
+            return MobileTinaSubscriptionMarkerManager.update(SubscriptionCache(subscriptionId, subItem))
         }
     }
 
@@ -223,30 +224,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun getSubscriptions(context: Context): List<GroupMapItem> {
         val subscriptions = MmkvManager.decodeSubscriptions()
-        if (subscriptionId.isNotEmpty()
-            && !subscriptions.map { it.guid }.contains(subscriptionId)
-        ) {
-            subscriptionIdChanged("")
+            .filter { it.guid != AppConfig.DEFAULT_SUBSCRIPTION_ID }
+        val validIds = subscriptions.map { it.guid }
+        if (subscriptionId.isBlank() || subscriptionId == AppConfig.DEFAULT_SUBSCRIPTION_ID || !validIds.contains(subscriptionId)) {
+            subscriptionId = subscriptions.firstOrNull()?.guid.orEmpty()
+            MmkvManager.encodeSettings(AppConfig.CACHE_SUBSCRIPTION_ID, subscriptionId)
         }
-
-        val groups = mutableListOf<GroupMapItem>()
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_GROUP_ALL_DISPLAY)) {
-            groups.add(
-                GroupMapItem(
-                    id = "",
-                    remarks = context.getString(R.string.filter_config_all)
-                )
+        return subscriptions.map { sub ->
+            GroupMapItem(
+                id = sub.guid,
+                remarks = sub.subscription.remarks
             )
         }
-        subscriptions.forEach { sub ->
-            groups.add(
-                GroupMapItem(
-                    id = sub.guid,
-                    remarks = sub.subscription.remarks
-                )
-            )
-        }
-        return groups
     }
 
     /**
@@ -423,16 +412,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             when (intent?.getIntExtra("key", 0)) {
                 AppConfig.MSG_STATE_RUNNING -> {
-                    isRunning.value = true
+                    updateRunningState(true)
                 }
 
                 AppConfig.MSG_STATE_NOT_RUNNING -> {
-                    isRunning.value = false
+                    updateRunningState(false)
                 }
 
                 AppConfig.MSG_STATE_START_SUCCESS -> {
-                    getApplication<AngApplication>().toastSuccess(R.string.toast_services_success)
-                    isRunning.value = true
+                    // MobileTina keeps successful starts silent; the connected state is visible in the main UI.
+                    updateRunningState(true)
                 }
 
                 AppConfig.MSG_STATE_START_FAILURE -> {
@@ -442,11 +431,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         getApplication<AngApplication>().toastError(R.string.toast_services_failure)
                     }
-                    isRunning.value = false
+                    updateRunningState(false)
                 }
 
                 AppConfig.MSG_STATE_STOP_SUCCESS -> {
-                    isRunning.value = false
+                    updateRunningState(false)
                 }
 
                 AppConfig.MSG_MEASURE_DELAY_SUCCESS -> {
@@ -459,9 +448,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 AppConfig.MSG_MEASURE_CONFIG_NOTIFY -> {
-                    val content = intent.getStringExtra("content")
-                    updateTestResultAction.value =
-                        getApplication<AngApplication>().getString(R.string.connection_runing_task_left, content)
+                    // Batch Real Ping progress is not a connected-server ping result.
+                    // Smart Connect renders its own countdown, so never feed progress numbers
+                    // (for example 0/1) into updateTestResultAction.
                 }
 
                 AppConfig.MSG_MEASURE_CONFIG_FINISH -> {
@@ -472,5 +461,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private fun updateRunningState(running: Boolean) {
+        MmkvManager.encodeSettings(AppConfig.CACHE_SERVICE_RUNNING, running)
+        isRunning.value = running
     }
 }

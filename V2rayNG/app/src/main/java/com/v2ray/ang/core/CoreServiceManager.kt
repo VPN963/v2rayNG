@@ -19,6 +19,7 @@ import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.extension.toastError
 import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.MobileTinaGeoAssetManager
 import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SpeedtestManager
@@ -34,17 +35,23 @@ import com.v2ray.ang.util.MessageUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.ProcessFinder
 import java.lang.ref.SoftReference
 import java.net.InetSocketAddress
+import java.util.concurrent.atomic.AtomicBoolean
 
 object CoreServiceManager {
 
+    private const val CACHE_SERVICE_STOP_DEADLINE = "cache_service_stop_deadline"
+    private const val STOP_COORDINATION_WINDOW_MS = 8_000L
+
     private val coreController: CoreController = CoreNativeManager.newCoreController(CoreCallback())
     private val mMsgReceive = ReceiveMessageHandler()
+    private val isStopping = AtomicBoolean(false)
     private var currentConfig: ProfileItem? = null
     private var processFinder: XrayProcessFinder? = null
     private var browserDialer: IDialerService? = null
@@ -105,7 +112,6 @@ object CoreServiceManager {
      * @param context The context from which the service is stopped.
      */
     fun stopVService(context: Context) {
-        //context.toast(R.string.toast_services_stop)
         MessageUtil.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
 
@@ -156,11 +162,7 @@ object CoreServiceManager {
             error(context.getString(R.string.toast_config_file_invalid))
         }
 
-        // refresh socks port when enabled dynamic socks port
         SettingsManager.refreshRuntimeSocksPort()
-
-//        val result = V2rayConfigUtil.getV2rayConfig(context, guid)
-//        if (!result.status) error(result.errorMessage.ifBlank { "Failed to get V2Ray config" })
 
         if (config.insecure == true) {
             context.toastError(R.string.toast_allow_insecure_deprecated)
@@ -169,8 +171,6 @@ object CoreServiceManager {
 
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
             context.toast(R.string.toast_warning_pref_proxysharing_short)
-        } else {
-            context.toast(R.string.toast_services_start)
         }
 
         val isRootMode = SettingsManager.isRootMode()
@@ -206,14 +206,10 @@ object CoreServiceManager {
         }
     }
 
-    /**
-     * Refer to the official documentation for [registerReceiver](https://developer.android.com/reference/androidx/core/content/ContextCompat#registerReceiver(android.content.Context,android.content.BroadcastReceiver,android.content.IntentFilter,int):
-     * `registerReceiver(Context, BroadcastReceiver, IntentFilter, int)`.
-     * Starts the V2Ray core service.
-     */
+    /** Starts the V2Ray core service. */
     fun startCoreLoop(vpnInterface: ParcelFileDescriptor?): Boolean {
-        if (coreController.isRunning) {
-            LogUtil.w(AppConfig.TAG, "StartCore-Manager: Core already running")
+        if (coreController.isRunning || isStopping.get()) {
+            LogUtil.w(AppConfig.TAG, "StartCore-Manager: Core is running or still stopping")
             return false
         }
 
@@ -226,13 +222,29 @@ object CoreServiceManager {
         try {
             doStartCoreLoop(service, vpnInterface)
             return true
-        } catch (e: Exception) {
-            val message = e.message?.takeUnless { it.isBlank() } ?: e.javaClass.simpleName
-            LogUtil.e(AppConfig.TAG, "StartCore-Manager: $message", e)
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, message)
-            NotificationManager.cancelNotification()
-            return false
+        } catch (firstError: Exception) {
+            // A full-size but corrupted geo file can survive an app update. If Xray explicitly
+            // names geo data in the failure, restore exactly that bundled database and retry once.
+            if (MobileTinaGeoAssetManager.repairFromCoreError(service.applicationContext, firstError)) {
+                LogUtil.w(AppConfig.TAG, "StartCore-Manager: retrying once after geo asset repair")
+                try {
+                    doStartCoreLoop(service, vpnInterface)
+                    return true
+                } catch (retryError: Exception) {
+                    return reportStartFailure(service, retryError)
+                }
+            }
+            return reportStartFailure(service, firstError)
         }
+    }
+
+    private fun reportStartFailure(service: Service, error: Exception): Boolean {
+        val message = error.message?.takeUnless { it.isBlank() } ?: error.javaClass.simpleName
+        LogUtil.e(AppConfig.TAG, "StartCore-Manager: $message", error)
+        MmkvManager.encodeSettings(AppConfig.CACHE_SERVICE_RUNNING, false)
+        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, message)
+        NotificationManager.cancelNotification()
+        return false
     }
 
     @Throws(Exception::class)
@@ -246,12 +258,6 @@ object CoreServiceManager {
         if (!result.status) {
             error(result.errorMessage.ifBlank { "Failed to get V2Ray config" })
         }
-
-        val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
-        mFilter.addAction(Intent.ACTION_SCREEN_ON)
-        mFilter.addAction(Intent.ACTION_SCREEN_OFF)
-        mFilter.addAction(Intent.ACTION_USER_PRESENT)
-        ContextCompat.registerReceiver(service, mMsgReceive, mFilter, Utils.receiverFlags())
 
         currentConfig = config
         var tunFd = vpnInterface?.fd ?: 0
@@ -272,6 +278,14 @@ object CoreServiceManager {
             error("Core failed to start")
         }
 
+        // Register only after the native core is confirmed running. A failed geo/config launch can
+        // then be retried once without leaving a duplicate receiver registration behind.
+        val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
+        mFilter.addAction(Intent.ACTION_SCREEN_ON)
+        mFilter.addAction(Intent.ACTION_SCREEN_OFF)
+        mFilter.addAction(Intent.ACTION_USER_PRESENT)
+        ContextCompat.registerReceiver(service, mMsgReceive, mFilter, Utils.receiverFlags())
+
         if (browserDialer != null) {
             browserDialer!!.stop()
             browserDialer = null
@@ -284,38 +298,44 @@ object CoreServiceManager {
             browserDialer!!.start(service, dialerAddr)
         }
 
+        MobileTinaSessionLimiter.schedule(service)
+        MmkvManager.encodeSettings(AppConfig.CACHE_SERVICE_RUNNING, true)
+        MmkvManager.encodeSettings(CACHE_SERVICE_STOP_DEADLINE, 0L)
         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
         NotificationManager.startSpeedNotification()
         LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core started successfully")
     }
 
     /**
-     * Stops the V2Ray core service.
-     * Unregisters broadcast receivers, stops notifications, and shuts down plugins.
-     * @return True if the core was stopped successfully, false otherwise.
+     * Stops the V2Ray core service. STOP_SUCCESS is emitted only after native stopLoop has
+     * actually returned, so a rapid second FAB tap cannot start a new core while the previous
+     * one is still releasing sockets and tunnel state.
      */
     fun stopCoreLoop(): Boolean {
-        val service = getService() ?: return false
-
-        if (coreController.isRunning) {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    coreController.stopLoop()
-                } catch (e: Exception) {
-                    LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to stop V2Ray loop", e)
-                }
-            }
+        if (!isStopping.compareAndSet(false, true)) {
+            LogUtil.i(AppConfig.TAG, "StartCore-Manager: stop already in progress")
+            return true
         }
 
-        // Close existing browser dialer
+        MmkvManager.encodeSettings(AppConfig.CACHE_SERVICE_RUNNING, false)
+        MmkvManager.encodeSettings(
+            CACHE_SERVICE_STOP_DEADLINE,
+            System.currentTimeMillis() + STOP_COORDINATION_WINDOW_MS
+        )
+
+        val service = getService() ?: run {
+            isStopping.set(false)
+            MmkvManager.encodeSettings(CACHE_SERVICE_STOP_DEADLINE, 0L)
+            acknowledgeStopRequest()
+            return false
+        }
+        MobileTinaSessionLimiter.cancel(service)
+
         CoreNativeManager.reconcileBrowserDialer("")
         if (browserDialer != null) {
             browserDialer!!.stop()
             browserDialer = null
         }
-
-        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-        NotificationManager.cancelNotification()
 
         try {
             service.unregisterReceiver(mMsgReceive)
@@ -323,7 +343,35 @@ object CoreServiceManager {
             LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to unregister receiver", e)
         }
 
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (coreController.isRunning) {
+                    coreController.stopLoop()
+                }
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to stop V2Ray loop", e)
+            } finally {
+                isStopping.set(false)
+                MmkvManager.encodeSettings(CACHE_SERVICE_STOP_DEADLINE, 0L)
+                NotificationManager.cancelNotification()
+                MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+                LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core stop completed")
+            }
+        }
+
         return true
+    }
+
+    /**
+     * Confirms that the active service has finished its own teardown. VPN mode calls
+     * this only after closing the TUN interface, so expiry work in another process can
+     * safely wait for a specific stop request instead of relying on a stale state flag.
+     */
+    fun acknowledgeStopRequest() {
+        val request = MmkvManager.decodeSettingsLong(AppConfig.CACHE_SERVICE_STOP_REQUEST, 0L)
+        if (request != 0L) {
+            MmkvManager.encodeSettings(AppConfig.CACHE_SERVICE_STOP_COMPLETED, request)
+        }
     }
 
     /**
@@ -351,7 +399,6 @@ object CoreServiceManager {
                 )
             )
         }
-//        LogUtil.d(AppConfig.TAG, "Queried outbound traffic stats: $result")
         return result
     }
 
@@ -392,7 +439,6 @@ object CoreServiceManager {
             }
             MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, result)
 
-            // Only fetch IP info if the delay test was successful
             if (time >= 0) {
                 SpeedtestManager.getRemoteIPInfo()?.let { ip ->
                     MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, "$result\n$ip")
@@ -401,31 +447,16 @@ object CoreServiceManager {
         }
     }
 
-    /**
-     * Gets the current service instance.
-     * @return The current service instance, or null if not available.
-     */
+    /** Gets the current service instance. */
     private fun getService(): Service? {
         return serviceControl?.get()?.getService()
     }
 
-    /**
-     * Core callback handler implementation for handling V2Ray core events.
-     * Handles startup, shutdown, socket protection, and status emission.
-     */
     private class CoreCallback : CoreCallbackHandler {
-        /**
-         * Called when V2Ray core starts up.
-         * @return 0 for success, any other value for failure.
-         */
         override fun startup(): Long {
             return 0
         }
 
-        /**
-         * Called when V2Ray core shuts down.
-         * @return 0 for success, any other value for failure.
-         */
         override fun shutdown(): Long {
             val serviceControl = serviceControl?.get() ?: return -1
             return try {
@@ -437,12 +468,6 @@ object CoreServiceManager {
             }
         }
 
-        /**
-         * Called when V2Ray core emits status information.
-         * @param l Status code.
-         * @param s Status message.
-         * @return Always returns 0.
-         */
         override fun onEmitStatus(l: Long, s: String?): Long {
             return 0
         }
@@ -476,8 +501,6 @@ object CoreServiceManager {
                     InetSocketAddress(destIP, destPort.toInt())
                 ).toLong()
                 LogUtil.d(AppConfig.TAG, "ProcessFinder: Find $network connection from $srcIP:$srcPort to $destIP:$destPort, uid=$uid")
-                //LogUtil.d(AppConfig.TAG, "ProcessFinder: Find $network connection from $srcIP:$srcPort to $destIP:$destPort, uid=$uid,${PackageUidResolver.uidToPackageName(uid.toString())}")
-
                 uid
             } catch (_: Exception) {
                 -1L
@@ -485,17 +508,8 @@ object CoreServiceManager {
         }
     }
 
-    /**
-     * Broadcast receiver for handling messages sent to the service.
-     * Handles registration, service control, and screen events.
-     */
+    /** Broadcast receiver for handling messages sent to the service. */
     private class ReceiveMessageHandler : BroadcastReceiver() {
-        /**
-         * Handles received broadcast messages.
-         * Processes service control messages and screen state changes.
-         * @param ctx The context in which the receiver is running.
-         * @param intent The intent being received.
-         */
         override fun onReceive(ctx: Context?, intent: Intent?) {
             val serviceControl = serviceControl?.get() ?: return
             when (intent?.getIntExtra("key", 0)) {
@@ -507,13 +521,8 @@ object CoreServiceManager {
                     }
                 }
 
-                AppConfig.MSG_UNREGISTER_CLIENT -> {
-                    // nothing to do
-                }
-
-                AppConfig.MSG_STATE_START -> {
-                    // nothing to do
-                }
+                AppConfig.MSG_UNREGISTER_CLIENT -> Unit
+                AppConfig.MSG_STATE_START -> Unit
 
                 AppConfig.MSG_STATE_STOP -> {
                     LogUtil.i(AppConfig.TAG, "StartCore-Manager: Stop service")
@@ -522,9 +531,19 @@ object CoreServiceManager {
 
                 AppConfig.MSG_STATE_RESTART -> {
                     LogUtil.i(AppConfig.TAG, "StartCore-Manager: Restart service")
+                    val service = serviceControl.getService()
                     serviceControl.stopService()
-                    Thread.sleep(500L)
-                    startVService(serviceControl.getService())
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val deadline = System.currentTimeMillis() + STOP_COORDINATION_WINDOW_MS
+                        while (isStopping.get() && System.currentTimeMillis() < deadline) {
+                            delay(50L)
+                        }
+                        if (!isStopping.get()) {
+                            startVService(service)
+                        } else {
+                            LogUtil.e(AppConfig.TAG, "StartCore-Manager: restart aborted because native stop did not finish")
+                        }
+                    }
                 }
 
                 AppConfig.MSG_MEASURE_DELAY -> {

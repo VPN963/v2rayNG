@@ -3,6 +3,7 @@ package com.v2ray.ang.handler
 import android.content.Context
 import android.graphics.Bitmap
 import android.text.TextUtils
+import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreConfigManager
@@ -190,6 +191,11 @@ object AngConfigManager {
         if (countSub > 0) {
             updateConfigViaSubAll()
         }
+
+        // Configs imported from QR, clipboard, files and URL schemes must trigger the
+        // retirement marker immediately; waiting for a later subscription refresh leaves
+        // an expired subscription active.
+        MobileTinaSubscriptionMarkerManager.processExistingMarkers()
 
         return count to countSub
     }
@@ -507,15 +513,7 @@ object AngConfigManager {
      * @return Detailed result of the subscription update operation.
      */
     fun updateConfigViaSubAll(): SubscriptionUpdateResult {
-        return try {
-            val subscriptions = MmkvManager.decodeSubscriptions()
-            subscriptions.fold(SubscriptionUpdateResult()) { acc, subscription ->
-                acc + updateConfigViaSub(subscription)
-            }
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to update config via all subscriptions", e)
-            SubscriptionUpdateResult()
-        }
+        return MobileTinaSubscriptionMarkerManager.updateAll()
     }
 
     /**
@@ -588,8 +586,14 @@ object AngConfigManager {
 
             val count = parseConfigViaSub(configText, it.guid, false)
             if (count > 0) {
+                MobileTinaExpiryManager.syncFromSubscriptionPayload(
+                    AngApplication.application,
+                    configText,
+                    it.guid
+                )
                 it.subscription.lastUpdated = System.currentTimeMillis()
                 MmkvManager.encodeSubscription(it.guid, it.subscription)
+                MobileTinaSubscriptionMarkerManager.processExistingMarkers()
                 LogUtil.i(AppConfig.TAG, "Subscription updated: ${it.subscription.remarks}, $count configs")
                 return SubscriptionUpdateResult(
                     configCount = count,

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">v2rayNG</string>
+    <string name="app_name" translatable="false">فیلترشکن</string>
     <string name="app_widget_name">Switch</string>
     <string name="app_tile_name">Switch</string>
     <string name="app_tile_first_use">First use of this feature, please use the app to add server</string>
@@ -12,7 +12,7 @@
     <string name="pull_down_to_refresh">Please pull down to refresh!</string>
 
     <!-- Notifications -->
-    <string name="notification_action_stop_v2ray">Stop</string>
+    <string name="notification_action_stop_v2ray">خاموش کردن فیلترشکن</string>
     <string name="toast_permission_denied">Unable to obtain the permission</string>
     <string name="toast_permission_denied_notification">Unable to obtain the notification permission</string>
     <string name="notification_action_more">Click for more</string>
@@ -40,8 +40,8 @@
     <string name="menu_item_import_config_manually_trojan">Add [Trojan]</string>
     <string name="menu_item_import_config_manually_wireguard">Add [Wireguard]</string>
     <string name="menu_item_import_config_manually_hysteria2">Add [Hysteria2]</string>
-    <string name="del_config_comfirm">Confirm delete ?</string>
-    <string name="del_invalid_config_comfirm">Please test before deleting! Confirm delete ?</string>
+    <string name="del_config_comfirm">واقعا میخوای حذف کنی؟</string>
+    <string name="del_invalid_config_comfirm">واقعا میخوای حذف کنی؟</string>
     <string name="server_lab_remarks">remarks</string>
     <string name="server_lab_address">address</string>
     <string name="server_lab_port">port</string>
@@ -100,7 +100,7 @@
     <string name="title_file_chooser">Select a config</string>
     <string name="toast_require_file_manager">Please install a File Manager.</string>
     <string name="server_customize_config">Customize config</string>
-    <string name="toast_config_file_invalid">Invalid config</string>
+    <string name="toast_config_file_invalid">کانفیگی وجود ندارد</string>
     <string name="server_lab_content">Content</string>
     <string name="toast_none_data_clipboard">There is no data in the clipboard</string>
     <string name="toast_invalid_url">Invalid URL</string>
@@ -151,12 +151,12 @@
     <string name="msg_downloading_content">Downloading content</string>
     <string name="menu_item_export_proxy_app">Export to Clipboard</string>
     <string name="menu_item_import_proxy_app">Import from Clipboard</string>
-    <string name="per_app_proxy_settings">Per-app settings</string>
+    <string name="per_app_proxy_settings">حالت پروکسی</string>
     <string name="per_app_proxy_settings_enable">Enable per-app</string>
     <string name="app_picker_unknown_app">Unknown app (unidentified UID)</string>
 
     <!-- Preferences -->
-    <string name="title_settings">Settings</string>
+    <string name="title_settings">تنظیمات</string>
     <string name="title_advanced">Advanced Settings</string>
     <string name="title_core_settings">Core Settings</string>
     <string name="title_vpn_settings">VPN Settings</string>
@@ -303,9 +303,9 @@
     <string name="logcat_clear">Clear</string>
     <string name="logcat_share">Share log</string>
     <string name="title_service_restart">Service restart</string>
-    <string name="title_del_all_config">Delete config</string>
-    <string name="title_del_duplicate_config">Delete duplicate config</string>
-    <string name="title_del_invalid_config">Delete invalid config</string>
+    <string name="title_del_all_config">حذف تمام کانفیگ ها</string>
+    <string name="title_del_duplicate_config">حذف کانفیگ مشابه</string>
+    <string name="title_del_invalid_config">حذف کانفیگ غیرفعال</string>
     <string name="title_export_all">Export configs to clipboard</string>
     <string name="title_sub_setting">Subscription group setting</string>
     <string name="sub_setting_remarks">remarks</string>
@@ -319,15 +319,15 @@
     <string name="sub_setting_next_profile">Next proxy config remarks</string>
     <string name="sub_setting_pre_profile_tip">The config remarks exist and are unique</string>
     <string name="toast_invalid_update_interval">Invalid update interval. Minimum is 15 minutes.</string>
-    <string name="title_sub_update">Update subscription</string>
-    <string name="title_real_ping_all_server">Real delay config</string>
+    <string name="title_sub_update">بروزرسانی اشتراک</string>
+    <string name="title_real_ping_all_server">تست سرعت</string>
     <string name="title_user_asset_setting">Asset files</string>
-    <string name="title_sort_by_test_results">Sorting by test results</string>
+    <string name="title_sort_by_test_results">مرتب سازی</string>
     <string name="title_filter_config">Filter config</string>
     <string name="filter_config_all">All</string>
     <string name="title_del_duplicate_config_count">Delete %d duplicate configs</string>
     <string name="title_del_config_count">Delete %d configs</string>
-    <string name="title_import_config_count">Import %d configs</string>
+    <string name="title_import_config_count">تعداد %d کانفیگ اضافه شد</string>
     <string name="title_export_config_count">Export %d configs</string>
     <string name="title_update_config_count">Update %d configs</string>
     <string name="title_update_subscription_result">Updated %1$d configs (%2$d success, %3$d failed, %4$d skipped)</string>
@@ -482,4 +482,5 @@
         <item>WebDAV</item>
     </string-array>
 
+    <string name="mobiletina_cancel">بیخیال</string>
 </resources>
