@@ -9,39 +9,29 @@ android {
     namespace = "com.v2ray.ang"
     compileSdk = 37
 
-    val fatArmApk = providers.gradleProperty("FAT_ARM_APK").orNull?.toBoolean() == true
-
     defaultConfig {
         applicationId = "com.v2ray.ang"
         minSdk = 24
         targetSdk = 37
-        versionCode = if (fatArmApk) 744 else 743
-        versionName = if (fatArmApk) "2.3.3-arm-universal" else "2.3.3"
+        versionCode = 743
+        versionName = "2.3.3"
 
         val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
-        if (fatArmApk) {
-            ndk {
-                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-            }
-        }
-
         splits {
             abi {
-                isEnable = !fatArmApk
-                if (!fatArmApk) {
-                    reset()
-                    if (!abiFilterList.isNullOrEmpty()) {
-                        include(*abiFilterList.toTypedArray())
-                    } else {
-                        include(
-                            "arm64-v8a",
-                            "armeabi-v7a",
-                            "x86_64",
-                            "x86"
-                        )
-                    }
+                isEnable = true
+                reset()
+                if (!abiFilterList.isNullOrEmpty()) {
+                    include(*abiFilterList.toTypedArray())
+                } else {
+                    include(
+                        "arm64-v8a",
+                        "armeabi-v7a",
+                        "x86_64",
+                        "x86"
+                    )
                 }
-                isUniversalApk = !fatArmApk && abiFilterList.isNullOrEmpty()
+                isUniversalApk = abiFilterList.isNullOrEmpty()
             }
         }
 
@@ -50,9 +40,7 @@ android {
 
     buildTypes {
         release {
-            isDebuggable = false
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -94,19 +82,7 @@ android {
     applicationVariants.all {
         val variant = this
         val isFdroid = variant.productFlavors.any { it.name == "fdroid" }
-
-        if (fatArmApk) {
-            variant.outputs
-                .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
-                .forEach { output ->
-                    output.outputFileName = "v2rayNG_${variant.versionName}_armv7-armv8.apk"
-                    output.versionCodeOverride = if (isFdroid) {
-                        (100 * variant.versionCode).plus(5000000)
-                    } else {
-                        (1000000 * 4).plus(variant.versionCode)
-                    }
-                }
-        } else if (isFdroid) {
+        if (isFdroid) {
             val versionCodes =
                 mapOf(
                     "armeabi-v7a" to 2, "arm64-v8a" to 1, "x86" to 4, "x86_64" to 3, "universal" to 0
@@ -157,13 +133,20 @@ android {
             useLegacyPackaging = true
         }
     }
+
 }
 
 dependencies {
+    // Core Libraries
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
+
+    // AndroidX Core Libraries
     implementation(libs.androidx.core.ktx)
+
+    // Compose Libraries
     implementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(platform(libs.androidx.compose.bom))
+
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
@@ -171,22 +154,37 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.coil.compose)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // Data and Storage Libraries
     implementation(libs.mmkv.static)
     implementation(libs.gson)
     implementation(libs.okhttp)
+
+    // Reactive and Utility Libraries
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
+
+    // QR Code: CameraX + ZXing
     implementation(libs.camerax.core)
     implementation(libs.camerax.camera2)
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.compose)
-    implementation(libs.core)
+    implementation(libs.core) // zxing core
+
+    // AndroidX Lifecycle and Architecture Components
     implementation(libs.lifecycle.viewmodel.ktx)
     implementation(libs.lifecycle.runtime.ktx)
+
+    // Background Task Libraries
     implementation(libs.work.runtime.ktx)
     implementation(libs.work.multiprocess)
+
+    // Reorderable list
     implementation(libs.reorderable)
+
+    // Testing Libraries
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
