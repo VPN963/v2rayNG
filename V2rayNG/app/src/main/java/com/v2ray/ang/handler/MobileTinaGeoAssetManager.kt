@@ -50,9 +50,8 @@ object MobileTinaGeoAssetManager {
      */
     @Synchronized
     fun repairFromCoreError(context: Context, error: Throwable): Boolean {
-        val messages = generateSequence<Throwable?>(error) { it.cause }
-            .filterNotNull()
-            .joinToString("\n") { it.message.orEmpty() }
+        val messages = generateSequence(error) { current -> current.cause }
+            .joinToString("\n") { throwable -> throwable.message.orEmpty() }
             .lowercase()
 
         val requestedName = when {
