@@ -9,10 +9,6 @@ on:
   push:
     branches:
       - master
-      - fix/samsung-fab-geo-hardening-20260821
-  pull_request:
-    branches:
-      - master
 
 permissions:
   contents: write
